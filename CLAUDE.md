@@ -131,8 +131,33 @@ Domaines confirmés (2026-09-07) :
   unique partiel ajouté sur `users(email) WHERE tenant_id IS NULL` — la
   contrainte `UNIQUE(tenant_id, email)` seule ne suffit pas, Postgres
   traite chaque `NULL` comme distinct.
-  **Pas encore fait : logout (invalidation de token), mot de passe
-  oublié, page de gestion des comptes admin dans le dashboard.**
+  **Pas encore fait : le dashboard admin ne consomme toujours pas ce
+  flux (page de gestion des comptes admin, login par formulaire) — reste
+  en X-Admin-Key côté frontend.**
+- **Authentification des clients finaux d'un tenant** (2026-09-07,
+  demandé explicitement pour HANI'S — ex: Fatou qui commande une robe).
+  Troisième public JWT, distinct de `Claims` (personnel tenant) et
+  `AdminClaims` (super-admin) : voir `internal/auth/customer.go`
+  (`CustomerClaims`). Un client existe d'abord sans mot de passe (créé
+  automatiquement par `catalog.CustomerService.FindOrCreate` à sa
+  première commande) ; `POST /auth/customer/register` lui permet d'en
+  définir un a posteriori pour se connecter et consulter son historique.
+  Identification principale par téléphone (pas email — cohérent avec le
+  reste du modèle `customers`). `customers.password_hash` nullable,
+  `customers.email` unique par tenant seulement quand renseigné (index
+  partiel, même piège que pour `users` ci-dessus). Mot de passe oublié
+  via token à usage unique envoyé par email (`customer_password_resets`,
+  seul le hash SHA-256 du token est stocké, jamais le token en clair) —
+  la route `forgot-password` répond toujours le même message générique,
+  qu'un compte existe ou non, pour ne pas permettre l'énumération
+  d'emails. **Vrai logout implémenté** : table `revoked_tokens` (jti +
+  expiration) car un JWT classique n'est pas invalidable avant son
+  expiration naturelle sans état côté serveur — mécanisme générique,
+  réutilisable plus tard pour les JWT tenant/admin si un vrai logout leur
+  est demandé (pas fait pour l'instant, seul le flux client l'utilise).
+  **Pas encore fait : aucun dashboard/frontend ne consomme ces routes
+  (`/auth/customer/*`) — c'est un backend prêt sans interface pour
+  l'instant.**
 
 ## État d'avancement
 
@@ -144,7 +169,11 @@ Domaines confirmés (2026-09-07) :
 - Routes HTTP existantes (voir `internal/httpserver/server.go` pour la liste
   exacte et à jour) :
   - `GET /health`
-  - `POST /auth/login`
+  - `POST /auth/login` (personnel tenant), `POST /admin/auth/login` (super-admin)
+  - `POST /auth/customer/register`, `/login`, `/forgot-password`, `/reset-password`
+    (clients finaux d'un tenant, identifiés par `tenant_slug` dans le body)
+  - Scopées JWT client (`customerAuth`) : `POST /auth/customer/logout`,
+    `GET/PATCH /auth/customer/me`
   - `POST /webhooks/cinetpay/{tenantSlug}`
   - Scopées `X-API-Key` : `GET /features`, `POST/GET /orders`,
     `GET/PATCH /orders/{id}`, `GET /orders/{id}/history`,
@@ -233,22 +262,24 @@ d'étape ni tout lancer en parallèle sans validation :
    **Le dashboard admin ne consomme pas encore `POST /admin/auth/login`
    ni les routes `/admin/accounts` — toujours en `X-Admin-Key` côté
    frontend pour l'instant. Logout/mot de passe oublié pas implémentés.**
-6. **Authentification client final (acheteurs des tenants, ex: clients de
-   HANI'S)** — demandé explicitement (2026-09-07) : `POST /auth/login`
-   (déjà existant pour les comptes `users` scopés à un tenant),
-   `POST /auth/logout` (invalidation de token — pas encore de mécanisme,
-   JWT actuel n'est pas révocable avant expiration), `POST
-   /auth/forgot-password` + `POST /auth/reset-password` (email via
-   Resend), `GET/PATCH /auth/me` (profil : nom, email, téléphone, adresse,
-   historique de commandes). Distinct de l'auth admin ET de l'auth tenant
-   par clé API (`X-API-Key`) — c'est un troisième public : les clients
-   finaux qui achètent chez un tenant comme HANI'S. Pas encore commencé.
-7. Monitoring + alertes de sécurité (email en cas d'anomalie : pics
+6. ~~Authentification client final (acheteurs des tenants, ex: clients de
+   HANI'S)~~ — **fait côté backend (2026-09-07)**, voir section décisions
+   ci-dessus (`internal/auth/customer.go`, routes `/auth/customer/*`).
+   `go build`/`go vet` OK. **Aucun frontend ne consomme encore ces
+   routes** — ni un futur site storefront public pour les clients de
+   HANI'S (n'existe pas), ni le tenant-dashboard (qui reste un outil pour
+   le personnel, pas pour les clients finaux).
+7. Personnel tenant : comptes individuels login/mot de passe pour
+   l'équipe d'un tenant comme HANI'S (au lieu de la clé API `X-API-Key`
+   partagée) — demandé explicitement, priorité placée après l'auth
+   client. Pas encore commencé ; `POST /auth/login` existe déjà pour les
+   `users` scopés à un tenant mais `tenant-dashboard/` ne l'utilise pas.
+8. Monitoring + alertes de sécurité (email en cas d'anomalie : pics
    d'erreurs, échecs de connexion répétés, quota dépassé) — pas commencé.
-8. Sitemap XML (référencement `landing/`) + flux XML produits par tenant
+9. Sitemap XML (référencement `landing/`) + flux XML produits par tenant
    (type Google Shopping) — pas commencé.
-9. Déploiement réel : k3s sur le VPS + vraies clés + DNS (4 sous-domaines
-   `.abmcy.com` à pointer : `api`, `ad`, `dash`, `core`).
+10. Déploiement réel : k3s sur le VPS + vraies clés + DNS (4 sous-domaines
+    `.abmcy.com` à pointer : `api`, `ad`, `dash`, `core`).
 
 Dépôt Git initialisé le 2026-09-07 (`git init`, commits réguliers depuis) —
 pas encore de remote GitHub configuré par l'utilisateur à cette date.

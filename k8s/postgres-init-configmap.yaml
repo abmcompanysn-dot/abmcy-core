@@ -171,17 +171,23 @@ data:
     CREATE INDEX idx_gallery_photos_tenant ON gallery_photos(tenant_id, category);
 
     -- ============================================================
-    -- CUSTOMERS (profil client léger, identifié par téléphone — pas de
-    -- compte/mot de passe : sert à rattacher mesures, panier et avis à la
-    -- même personne sans exiger d'inscription)
+    -- CUSTOMERS (profil client, identifié par téléphone). Un client peut
+    -- exister sans jamais avoir défini de mot de passe (créé automatiquement
+    -- à la première commande sur-mesure, voir catalog.CustomerService) — le
+    -- mot de passe est optionnel et n'est requis que pour se connecter et
+    -- consulter son historique/profil en ligne via /auth/customer/*.
+    -- shipping_address stocke la dernière adresse utilisée, en repli pour
+    -- GET/PATCH /auth/customer/me.
     -- ============================================================
     CREATE TABLE customers (
-        id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        tenant_id   UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-        name        VARCHAR(100) NOT NULL,
-        phone       VARCHAR(20) NOT NULL,
-        email       VARCHAR(255),
-        created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+        id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        tenant_id       UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+        name            VARCHAR(100) NOT NULL,
+        phone           VARCHAR(20) NOT NULL,
+        email           VARCHAR(255),
+        shipping_address TEXT,
+        password_hash   VARCHAR(255),        -- NULL tant que le client n'a pas créé de compte
+        created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
         UNIQUE (tenant_id, phone)
     );
 
@@ -190,6 +196,49 @@ data:
         USING (tenant_id = current_setting('app.tenant_id', true)::uuid);
 
     CREATE INDEX idx_customers_tenant ON customers(tenant_id);
+
+    -- Un email n'est pas obligatoire (identification principale = téléphone),
+    -- mais quand il est présent et qu'un mot de passe est défini, il doit
+    -- être unique par tenant pour permettre le login par email + mot de passe
+    -- et l'envoi du lien de réinitialisation.
+    CREATE UNIQUE INDEX idx_customers_tenant_email ON customers (tenant_id, email) WHERE email IS NOT NULL;
+
+    -- ============================================================
+    -- CUSTOMER PASSWORD RESET TOKENS (lien "mot de passe oublié" envoyé par
+    -- email via Resend — un token à usage unique, expirant, jamais le mot de
+    -- passe lui-même en clair nulle part).
+    -- ============================================================
+    CREATE TABLE customer_password_resets (
+        id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        tenant_id   UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+        customer_id UUID NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+        token_hash  VARCHAR(255) NOT NULL, -- sha256 du token envoyé par email, jamais le token en clair
+        expires_at  TIMESTAMPTZ NOT NULL,
+        used_at     TIMESTAMPTZ,
+        created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
+    ALTER TABLE customer_password_resets ENABLE ROW LEVEL SECURITY;
+    CREATE POLICY tenant_isolation_customer_password_resets ON customer_password_resets
+        USING (tenant_id = current_setting('app.tenant_id', true)::uuid);
+
+    CREATE INDEX idx_customer_password_resets_token ON customer_password_resets(token_hash);
+
+    -- ============================================================
+    -- REVOKED TOKENS (liste de révocation pour le logout — un JWT classique
+    -- n'est pas invalidable avant son expiration naturelle sans état côté
+    -- serveur ; on enregistre son jti jusqu'à l'expiration qu'il portait déjà,
+    -- après quoi la ligne est un déchet inoffensif à purger périodiquement.
+    -- Table système, pas de RLS : utilisée par n'importe quel type de JWT
+    -- (client, tenant, admin) via son jti, pas scopée à un tenant).
+    -- ============================================================
+    CREATE TABLE revoked_tokens (
+        jti         VARCHAR(64) PRIMARY KEY,
+        expires_at  TIMESTAMPTZ NOT NULL,
+        revoked_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
+    CREATE INDEX idx_revoked_tokens_expires ON revoked_tokens(expires_at);
 
     -- ============================================================
     -- MEASUREMENTS (mesures sur-mesure d'un client, versionnées : un client

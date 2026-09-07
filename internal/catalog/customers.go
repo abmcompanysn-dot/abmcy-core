@@ -11,10 +11,11 @@ import (
 )
 
 type Customer struct {
-	ID    uuid.UUID `json:"id"`
-	Name  string    `json:"name"`
-	Phone string    `json:"phone"`
-	Email string    `json:"email,omitempty"`
+	ID              uuid.UUID `json:"id"`
+	Name            string    `json:"name"`
+	Phone           string    `json:"phone"`
+	Email           string    `json:"email,omitempty"`
+	ShippingAddress string    `json:"shipping_address,omitempty"`
 }
 
 type CustomerService struct {
@@ -40,9 +41,9 @@ func (s *CustomerService) FindOrCreate(ctx context.Context, tenantID uuid.UUID, 
 			INSERT INTO customers (tenant_id, name, phone, email)
 			VALUES ($1, $2, $3, $4)
 			ON CONFLICT (tenant_id, phone) DO UPDATE SET name = $2, email = coalesce(nullif($4, ''), customers.email)
-			RETURNING id, name, phone, coalesce(email, '')
+			RETURNING id, name, phone, coalesce(email, ''), coalesce(shipping_address, '')
 		`, tenantID, name, phone, email)
-		return row.Scan(&c.ID, &c.Name, &c.Phone, &c.Email)
+		return row.Scan(&c.ID, &c.Name, &c.Phone, &c.Email, &c.ShippingAddress)
 	})
 	if err != nil {
 		return nil, fmt.Errorf("catalog: find or create customer: %w", err)

@@ -17,6 +17,7 @@ import (
 	"github.com/abmcy/core/internal/storage"
 	"github.com/abmcy/core/internal/tenant"
 	"github.com/abmcy/core/internal/traffic"
+	"github.com/abmcy/core/pkg/apierror"
 	"github.com/abmcy/core/pkg/response"
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
@@ -116,6 +117,22 @@ func (s *Server) routes(rl *authmw.RateLimit) {
 	r.Post("/auth/login", s.handleLogin)
 	r.Post("/admin/auth/login", s.handleAdminLogin)
 	r.Post("/webhooks/cinetpay/{tenantSlug}", s.handleCinetPayWebhook)
+
+	// Authentification des clients finaux d'un tenant (ex: les acheteurs
+	// de HANI'S) — troisième public, distinct du personnel tenant
+	// (X-API-Key) et du super-admin ABMCY. Identifié par tenant_slug dans
+	// le corps de la requête puisqu'un client final n'a pas de clé API.
+	r.Post("/auth/customer/register", s.handleCustomerRegister)
+	r.Post("/auth/customer/login", s.handleCustomerLogin)
+	r.Post("/auth/customer/forgot-password", s.handleCustomerForgotPassword)
+	r.Post("/auth/customer/reset-password", s.handleCustomerResetPassword)
+
+	r.Group(func(r chi.Router) {
+		r.Use(s.customerAuth)
+		r.Post("/auth/customer/logout", s.handleCustomerLogout)
+		r.Get("/auth/customer/me", s.handleCustomerMe)
+		r.Patch("/auth/customer/me", s.handleCustomerUpdateMe)
+	})
 
 	// Tenant-scoped API — requires X-API-Key, used by dash.abmcy.com clients.
 	r.Group(func(r chi.Router) {
@@ -224,6 +241,37 @@ func (s *Server) adminAuth(next http.Handler) http.Handler {
 
 		http.Error(w, `{"error":{"code":"forbidden","message":"Accès refusé."}}`, http.StatusForbidden)
 	})
+}
+
+type customerCtxKey struct{}
+
+// customerAuth identifies the calling end customer from their JWT
+// (Authorization: Bearer ..., issued by /auth/customer/login or
+// /register) and attaches their claims to the request context. Distinct
+// from TenantAuth (X-API-Key, tenant staff) — a customer token must never
+// grant access to tenant-management routes.
+func (s *Server) customerAuth(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		auth := r.Header.Get("Authorization")
+		if !strings.HasPrefix(auth, "Bearer ") {
+			response.Err(w, apierror.ErrUnauthorized)
+			return
+		}
+
+		claims, err := s.authSvc.ParseCustomerToken(r.Context(), strings.TrimPrefix(auth, "Bearer "))
+		if err != nil {
+			response.Err(w, apierror.ErrUnauthorized)
+			return
+		}
+
+		ctx := context.WithValue(r.Context(), customerCtxKey{}, claims)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+func customerFromContext(ctx context.Context) (*auth.CustomerClaims, bool) {
+	c, ok := ctx.Value(customerCtxKey{}).(*auth.CustomerClaims)
+	return c, ok
 }
 
 func (s *Server) corsMiddleware(next http.Handler) http.Handler {
