@@ -14,9 +14,7 @@ export function Footer() {
       <div className="mx-auto flex max-w-6xl flex-col gap-8 px-6 py-12 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <a href="#top" className="flex items-center gap-2 font-semibold text-slate-900">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 text-sm font-bold text-white">
-              A
-            </span>
+            <img src="/logo.svg" alt="" width={32} height={32} />
             <span>
               ABMCY <span className="text-indigo-600">Core</span>
             </span>

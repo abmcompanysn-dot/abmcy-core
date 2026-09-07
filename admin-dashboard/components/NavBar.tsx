@@ -21,7 +21,8 @@ export function NavBar() {
     <header className="border-b border-slate-200 bg-white">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
         <div className="flex items-center gap-8">
-          <span className="text-lg font-semibold text-slate-900">
+          <span className="flex items-center gap-2 text-lg font-semibold text-slate-900">
+            <img src="/logo.svg" alt="" width={28} height={28} />
             ABMCY <span className="text-indigo-600">Admin</span>
           </span>
           <nav className="flex gap-1">

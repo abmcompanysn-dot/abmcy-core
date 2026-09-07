@@ -13,9 +13,7 @@ export function Header() {
     <header className="sticky top-0 z-50 border-b border-slate-100 bg-white/80 backdrop-blur-md">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
         <a href="#top" className="flex items-center gap-2 font-semibold text-slate-900">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 text-sm font-bold text-white">
-            A
-          </span>
+          <img src="/logo.svg" alt="" width={32} height={32} />
           <span>
             ABMCY <span className="text-indigo-600">Core</span>
           </span>

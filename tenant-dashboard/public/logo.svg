@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" width="100%" height="100%">
+  <defs>
+    <!-- Dégradé Technologique -->
+    <linearGradient id="abmcyGrad" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#0F172A" />
+      <stop offset="50%" stop-color="#2563EB" />
+      <stop offset="100%" stop-color="#06B6D4" />
+    </linearGradient>
+    <linearGradient id="accentGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38BDF8" />
+      <stop offset="100%" stop-color="#3B82F6" />
+    </linearGradient>
+  </defs>
+
+  <!-- Fond -->
+  <rect width="500" height="500" rx="40" fill="#090D16" />
+
+  <!-- Symbole Isometric ABMCY Core -->
+  <g transform="translate(100, 80)">
+    <!-- Forme A / Core -->
+    <path d="M150 40 L230 180 H180 L150 120 L120 180 H70 Z" fill="url(#abmcyGrad)" />
+    <!-- Cercle Core / Connexion -->
+    <circle cx="150" cy="190" r="18" fill="url(#accentGrad)" />
+    <!-- Lignes de circuit / Digitalisation -->
+    <path d="M150 208 V240 M110 220 H190" stroke="#38BDF8" stroke-width="4" stroke-linecap="round" />
+  </g>
+
+  <!-- Texte ABMCY CORE -->
+  <text x="250" y="380" font-family="'Segoe UI', Roboto, sans-serif" font-weight="800" font-size="42" fill="#FFFFFF" text-anchor="middle" letter-spacing="4">
+    ABMCY
+  </text>
+  <text x="250" y="420" font-family="'Segoe UI', Roboto, sans-serif" font-weight="400" font-size="20" fill="#38BDF8" text-anchor="middle" letter-spacing="8">
+    CORE
+  </text>
+</svg>
