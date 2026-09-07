@@ -6,7 +6,7 @@ d'ensemble ; ce fichier donne le contexte, les décisions et l'état d'avancemen
 
 ## Qui, quoi, pourquoi
 
-Le propriétaire du projet (contact : abmcompanysn@gmail.com) développe une
+Le propriétaire du projet (contact : batekossi@gmail.com) développe une
 plateforme SaaS/BaaS multi-tenant nommée **ABMCY Core Multi-Tenant**. Premier
 client cible : **HANI'S** (boutique de couture/sur-mesure). Le principe :
 plusieurs clients (tenants) partagent la même infrastructure backend, chacun
@@ -38,9 +38,14 @@ Domaines confirmés (2026-09-07) :
   passent par `db.Pool.WithSystem(ctx, fn)`. Ne jamais requêter les tables
   tenant-scopées (`orders`, `products`, `payments`, `product_images`,
   `email_logs`, `users`) hors de ces deux méthodes.
-- **Images : imgbb.com**, pas S3/MinIO/stockage local. On n'stocke que l'URL
-  retournée + le poids (pour calculer le quota). Voir
-  `internal/storage/imgbb.go`.
+- **Images : Cloudflare R2** (bucket S3-compatible, sans frais de sortie),
+  pas S3/MinIO/imgbb. Migré depuis imgbb le 2026-09-07 — imgbb n'offrait pas
+  de garantie de service pour un usage SaaS commercial à volume. On stocke
+  juste l'URL publique (via le domaine `img.abmcy.com` connecté au bucket) +
+  le poids en base (pour calculer le quota). Voir `internal/storage/r2.go`
+  (`R2Client`, utilise `aws-sdk-go-v2/service/s3` pointé sur l'endpoint R2).
+  Variables d'env : `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`,
+  `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_PUBLIC_URL`.
 - **Emails : Resend**, quota strict de 100/jour par tenant appliqué côté
   serveur avant chaque envoi (voir `internal/notification/service.go`), pas
   seulement documenté/espéré.
@@ -66,7 +71,7 @@ Domaines confirmés (2026-09-07) :
 ### Fait et vérifié
 - Backend Go : compile (`go build ./...`), passe `go vet ./...`. **Jamais
   testé contre une vraie base Postgres ni de vraies clés API externes
-  (imgbb/Resend/CinetPay) — seulement vérifié à la compilation.**
+  (R2/Resend/CinetPay) — seulement vérifié à la compilation.**
 - Schéma Postgres + RLS : `migrations/0001_init.sql`.
 - Routes HTTP existantes (voir `internal/httpserver/server.go` pour la liste
   exacte et à jour) :
@@ -101,7 +106,7 @@ Domaines confirmés (2026-09-07) :
   utilisateur (multi-comptes par tenant, rôles staff/owner) est voulu, ou si
   `X-API-Key` seul suffit pour le tenant-dashboard.
 - Déploiement réel jamais effectué : ni k3s sur le VPS, ni les dashboards sur
-  Vercel, ni les vraies clés API (imgbb/Resend/CinetPay) configurées et
+  Vercel, ni les vraies clés API (R2/Resend/CinetPay) configurées et
   testées.
 - DNS / domaines (`cors.abmcy.com`, `dash.abmcy.com`) pas encore configurés
   côté registrar.

@@ -59,11 +59,31 @@ spec:
                 secretKeyRef:
                   name: abmcy-secrets
                   key: JWT_SECRET
-            - name: IMGBB_API_KEY
+            - name: R2_ACCOUNT_ID
               valueFrom:
                 secretKeyRef:
                   name: abmcy-secrets
-                  key: IMGBB_API_KEY
+                  key: R2_ACCOUNT_ID
+            - name: R2_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: abmcy-secrets
+                  key: R2_ACCESS_KEY_ID
+            - name: R2_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: abmcy-secrets
+                  key: R2_SECRET_ACCESS_KEY
+            - name: R2_BUCKET
+              valueFrom:
+                secretKeyRef:
+                  name: abmcy-secrets
+                  key: R2_BUCKET
+            - name: R2_PUBLIC_URL
+              valueFrom:
+                secretKeyRef:
+                  name: abmcy-secrets
+                  key: R2_PUBLIC_URL
             - name: RESEND_API_KEY
               valueFrom:
                 secretKeyRef:

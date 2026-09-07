@@ -1,6 +1,6 @@
 // Command api boots the ABMCY Core Multi-Tenant backend: a single Go
 // binary (modulith) exposing every service — tenants, auth, catalog,
-// orders, storage (imgbb), payments (CinetPay), notifications (Resend)
+// orders, storage (Cloudflare R2), payments (CinetPay), notifications (Resend)
 // — behind one HTTP router. Deployed on the VPS behind api.abmcy.com;
 // the frontend dashboards (dash.abmcy.com, ad.abmcy.com) live separately
 // on Vercel and talk to this API over HTTPS.
@@ -52,8 +52,18 @@ func main() {
 	authSvc := auth.NewService(pool, cfg.JWTSecret)
 	orders := order.NewService(pool)
 
-	imgbb := storage.NewImgBBClient(cfg.ImgBBAPIKey)
-	storageSvc := storage.NewService(pool, imgbb)
+	r2, err := storage.NewR2Client(storage.R2Config{
+		AccountID:       cfg.R2AccountID,
+		AccessKeyID:     cfg.R2AccessKeyID,
+		SecretAccessKey: cfg.R2SecretAccessKey,
+		Bucket:          cfg.R2Bucket,
+		PublicURL:       cfg.R2PublicURL,
+	})
+	if err != nil {
+		slog.Error("storage: r2 client init failed", "error", err)
+		os.Exit(1)
+	}
+	storageSvc := storage.NewService(pool, r2)
 
 	cinetpay := payment.NewCinetPayClient(cfg.CinetPayAPIKey, cfg.CinetPaySiteID)
 	payments := payment.NewService(pool, cinetpay, orders)

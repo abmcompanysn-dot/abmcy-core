@@ -10,12 +10,12 @@ import (
 )
 
 type Service struct {
-	pool  *db.Pool
-	imgbb *ImgBBClient
+	pool *db.Pool
+	r2   *R2Client
 }
 
-func NewService(pool *db.Pool, imgbb *ImgBBClient) *Service {
-	return &Service{pool: pool, imgbb: imgbb}
+func NewService(pool *db.Pool, r2 *R2Client) *Service {
+	return &Service{pool: pool, r2: r2}
 }
 
 type UploadedImage struct {
@@ -25,10 +25,10 @@ type UploadedImage struct {
 }
 
 // UploadProductImage enforces the tenant's storage quota (default 5 Go,
-// adjustable per plan), uploads the file to imgbb, then records the
+// adjustable per plan), uploads the file to R2, then records the
 // resulting URL and increments storage_used_bytes — all inside the
 // tenant's RLS transaction so quota checks stay race-free per tenant.
-func (s *Service) UploadProductImage(ctx context.Context, tenantID uuid.UUID, productID *uuid.UUID, filename string, data []byte) (*UploadedImage, error) {
+func (s *Service) UploadProductImage(ctx context.Context, tenantID uuid.UUID, productID *uuid.UUID, filename, contentType string, data []byte) (*UploadedImage, error) {
 	fileSize := int64(len(data))
 
 	var quotaOK bool
@@ -48,20 +48,20 @@ func (s *Service) UploadProductImage(ctx context.Context, tenantID uuid.UUID, pr
 		return nil, apierror.ErrStorageQuota
 	}
 
-	// Upload happens outside the DB transaction — imgbb is a slow external
+	// Upload happens outside the DB transaction — R2 is a slow external
 	// call and we don't want to hold a Postgres tx open while waiting on it.
-	uploaded, err := s.imgbb.Upload(ctx, filename, data)
+	uploaded, err := s.r2.Upload(ctx, tenantID, filename, contentType, data)
 	if err != nil {
-		return nil, fmt.Errorf("storage: imgbb upload: %w", err)
+		return nil, fmt.Errorf("storage: r2 upload: %w", err)
 	}
 
 	var img UploadedImage
 	err = s.pool.WithTenant(ctx, tenantID, func(ctx context.Context, tx db.TxLike) error {
 		row := tx.QueryRow(ctx, `
-			INSERT INTO product_images (tenant_id, product_id, imgbb_url, imgbb_delete_url, size_bytes)
-			VALUES ($1, $2, $3, $4, $5)
-			RETURNING id, imgbb_url, size_bytes
-		`, tenantID, productID, uploaded.URL, uploaded.DeleteURL, uploaded.SizeBytes)
+			INSERT INTO product_images (tenant_id, product_id, image_url, size_bytes)
+			VALUES ($1, $2, $3, $4)
+			RETURNING id, image_url, size_bytes
+		`, tenantID, productID, uploaded.URL, uploaded.SizeBytes)
 		if err := row.Scan(&img.ID, &img.URL, &img.SizeBytes); err != nil {
 			return err
 		}

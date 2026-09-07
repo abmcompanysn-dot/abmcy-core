@@ -1,6 +1,6 @@
 # Déploiement VPS (4 CPU / 6 Go RAM) : un seul binaire Go (modulith) +
-# Postgres. Le stockage d'images ne consomme pas de disque local (imgbb),
-# donc pas de volume S3/MinIO à gérer ici.
+# Postgres. Le stockage d'images ne consomme pas de disque local — il part
+# vers un bucket Cloudflare R2, donc pas de volume S3/MinIO à gérer ici.
 services:
   postgres:
     image: postgres:16-alpine
@@ -30,7 +30,11 @@ services:
       PORT: 8080
       DATABASE_URL: postgres://abmcy_app:${POSTGRES_PASSWORD}@postgres:5432/abmcy?sslmode=disable
       JWT_SECRET: ${JWT_SECRET}
-      IMGBB_API_KEY: ${IMGBB_API_KEY}
+      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY}
+      R2_BUCKET: ${R2_BUCKET}
+      R2_PUBLIC_URL: ${R2_PUBLIC_URL}
       RESEND_API_KEY: ${RESEND_API_KEY}
       RESEND_FROM_ADDR: ${RESEND_FROM_ADDR}
       CINETPAY_API_KEY: ${CINETPAY_API_KEY}

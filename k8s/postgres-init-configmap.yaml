@@ -85,14 +85,13 @@ data:
     CREATE INDEX idx_products_tenant ON products(tenant_id);
 
     -- ============================================================
-    -- PRODUCT IMAGES (uploadées sur imgbb, on garde juste l'URL + le poids)
+    -- PRODUCT IMAGES (uploadées sur Cloudflare R2, on garde juste l'URL + le poids)
     -- ============================================================
     CREATE TABLE product_images (
         id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         tenant_id    UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
         product_id   UUID REFERENCES products(id) ON DELETE CASCADE,
-        imgbb_url    TEXT NOT NULL,
-        imgbb_delete_url TEXT,
+        image_url    TEXT NOT NULL,
         size_bytes   BIGINT NOT NULL,
         created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
     );

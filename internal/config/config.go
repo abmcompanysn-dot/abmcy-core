@@ -16,7 +16,12 @@ type Config struct {
 
 	JWTSecret string
 
-	ImgBBAPIKey string // https://api.imgbb.com/ upload key
+	// Cloudflare R2 (S3-compatible object storage for product/fabric images).
+	R2AccountID       string
+	R2AccessKeyID     string
+	R2SecretAccessKey string
+	R2Bucket          string
+	R2PublicURL       string // e.g. "https://img.abmcy.com", no trailing slash
 
 	ResendAPIKey   string
 	ResendFromAddr string // e.g. "ABMCY <no-reply@abmcy.com>"
@@ -38,7 +43,11 @@ func Load() (*Config, error) {
 		DatabaseURL: os.Getenv("DATABASE_URL"),
 		JWTSecret:   os.Getenv("JWT_SECRET"),
 
-		ImgBBAPIKey: os.Getenv("IMGBB_API_KEY"),
+		R2AccountID:       os.Getenv("R2_ACCOUNT_ID"),
+		R2AccessKeyID:     os.Getenv("R2_ACCESS_KEY_ID"),
+		R2SecretAccessKey: os.Getenv("R2_SECRET_ACCESS_KEY"),
+		R2Bucket:          os.Getenv("R2_BUCKET"),
+		R2PublicURL:       os.Getenv("R2_PUBLIC_URL"),
 
 		ResendAPIKey:   os.Getenv("RESEND_API_KEY"),
 		ResendFromAddr: getEnv("RESEND_FROM_ADDR", "ABMCY <no-reply@abmcy.com>"),
@@ -56,8 +65,8 @@ func Load() (*Config, error) {
 	if cfg.JWTSecret == "" {
 		return nil, fmt.Errorf("JWT_SECRET is required")
 	}
-	if cfg.ImgBBAPIKey == "" {
-		return nil, fmt.Errorf("IMGBB_API_KEY is required")
+	if cfg.R2AccountID == "" || cfg.R2AccessKeyID == "" || cfg.R2SecretAccessKey == "" || cfg.R2Bucket == "" || cfg.R2PublicURL == "" {
+		return nil, fmt.Errorf("R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET and R2_PUBLIC_URL are all required")
 	}
 
 	return cfg, nil

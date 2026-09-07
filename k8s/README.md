@@ -109,7 +109,8 @@ contient que des placeholders et n'est pas déployé par `kustomization.yaml`.
 
 Le fichier `.env` (déjà présent à la racine du repo, non commité) contient
 les clés suivantes : `APP_ENV`, `PORT`, `DATABASE_URL`, `POSTGRES_PASSWORD`,
-`JWT_SECRET`, `ADMIN_API_KEY`, `IMGBB_API_KEY`, `RESEND_API_KEY`,
+`JWT_SECRET`, `ADMIN_API_KEY`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`,
+`R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_PUBLIC_URL`, `RESEND_API_KEY`,
 `RESEND_FROM_ADDR`, `CINETPAY_API_KEY`, `CINETPAY_SITE_ID`, `CORS_ORIGINS`.
 
 Le Secret Kubernetes `abmcy-secrets` n'a besoin que des clés réellement
@@ -127,7 +128,11 @@ kubectl create secret generic abmcy-secrets \
   --from-literal=POSTGRES_PASSWORD="$(grep '^POSTGRES_PASSWORD=' .env | cut -d= -f2-)" \
   --from-literal=DATABASE_URL="$(grep '^DATABASE_URL=' .env | cut -d= -f2-)" \
   --from-literal=JWT_SECRET="$(grep '^JWT_SECRET=' .env | cut -d= -f2-)" \
-  --from-literal=IMGBB_API_KEY="$(grep '^IMGBB_API_KEY=' .env | cut -d= -f2-)" \
+  --from-literal=R2_ACCOUNT_ID="$(grep '^R2_ACCOUNT_ID=' .env | cut -d= -f2-)" \
+  --from-literal=R2_ACCESS_KEY_ID="$(grep '^R2_ACCESS_KEY_ID=' .env | cut -d= -f2-)" \
+  --from-literal=R2_SECRET_ACCESS_KEY="$(grep '^R2_SECRET_ACCESS_KEY=' .env | cut -d= -f2-)" \
+  --from-literal=R2_BUCKET="$(grep '^R2_BUCKET=' .env | cut -d= -f2-)" \
+  --from-literal=R2_PUBLIC_URL="$(grep '^R2_PUBLIC_URL=' .env | cut -d= -f2-)" \
   --from-literal=RESEND_API_KEY="$(grep '^RESEND_API_KEY=' .env | cut -d= -f2-)" \
   --from-literal=RESEND_FROM_ADDR="$(grep '^RESEND_FROM_ADDR=' .env | cut -d= -f2-)" \
   --from-literal=CINETPAY_API_KEY="$(grep '^CINETPAY_API_KEY=' .env | cut -d= -f2-)" \

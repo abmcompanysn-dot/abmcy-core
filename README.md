@@ -17,8 +17,9 @@ partagée.
   paiements. Déployé sur Vercel sous `dash.abmcy.com`.
 - **Site vitrine** (`landing/`) : présente le projet ABMCY Core, déployé sur Vercel
   sous `core.abmcy.com`.
-- **Images** : uploadées directement vers [imgbb.com](https://api.imgbb.com/) — pas
-  de stockage S3/MinIO, on garde juste l'URL retournée.
+- **Images** : uploadées vers un bucket [Cloudflare R2](https://developers.cloudflare.com/r2/)
+  (compatible S3, sans frais de sortie), servies via un domaine public dédié
+  (`img.abmcy.com`). On garde juste l'URL + le poids en base.
 - **Emails** : envoyés via [Resend](https://resend.com/), quota strict de 100/jour
   par tenant, appliqué côté serveur.
 - **Paiements** : [CinetPay](https://cinetpay.com/) (agrège Wave, Orange Money, MTN
@@ -41,7 +42,7 @@ internal/
   tenant/                  Gestion des tenants (créé/listé par le super-admin)
   auth/                    Login JWT scopé par tenant
   order/                   Commandes + mesures sur-mesure
-  storage/                 Upload d'images vers imgbb + suivi du quota
+  storage/                 Upload d'images vers Cloudflare R2 + suivi du quota
   payment/                 Intégration CinetPay
   notification/            Envoi d'emails via Resend + quota journalier
   catalog/                 (vide — catalogue produits pas encore implémenté)
@@ -61,7 +62,7 @@ docker-compose.yml         Déploiement local/simple (alternative à k8s/)
 ## Démarrage rapide (développement local)
 
 ```bash
-cp .env.example .env   # remplir DATABASE_URL, JWT_SECRET, IMGBB_API_KEY, etc.
+cp .env.example .env   # remplir DATABASE_URL, JWT_SECRET, R2_*, etc.
 go mod tidy
 go build ./...
 go run ./cmd/api

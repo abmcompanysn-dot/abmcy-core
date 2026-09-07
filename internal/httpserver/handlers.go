@@ -58,9 +58,9 @@ func (s *Server) handleListOrders(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, orders)
 }
 
-// --- Storage / imgbb uploads -----------------------------------------
+// --- Storage / R2 uploads -----------------------------------------
 
-const maxUploadBytes = 25 << 20 // 25 MB per file, generous headroom under imgbb's own 32MB cap
+const maxUploadBytes = 25 << 20 // 25 MB per file, generous headroom for product photos
 
 func (s *Server) handleUploadImage(w http.ResponseWriter, r *http.Request) {
 	t, _ := authmw.TenantFromContext(r.Context())
@@ -84,7 +84,12 @@ func (s *Server) handleUploadImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	img, err := s.storage.UploadProductImage(r.Context(), t.ID, nil, header.Filename, data)
+	contentType := header.Header.Get("Content-Type")
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+
+	img, err := s.storage.UploadProductImage(r.Context(), t.ID, nil, header.Filename, contentType, data)
 	if err != nil {
 		response.Err(w, err)
 		return
