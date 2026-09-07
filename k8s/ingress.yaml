@@ -1,29 +1,22 @@
-# Ingress Traefik (contrôleur par défaut de k3s, pas besoin de l'installer)
-# pour exposer l'API en HTTPS sur api.abmcy.com. cert-manager surveille
-# l'annotation cert-manager.io/cluster-issuer et provisionne/renouvelle
-# automatiquement le certificat Let's Encrypt dans le Secret référencé par
-# tls.secretName.
+# Ingress nginx (ingress-nginx, contrôleur déjà présent sur ce cluster
+# aux côtés du projet Diarra) pour router api.abmcy.com vers le Service
+# api du namespace abmcy.
 #
-# NOTE : on ne force PAS de redirection HTTP -> HTTPS ici via annotation.
-# Le solver http01 du ClusterIssuer (voir cluster-issuer.yaml) a besoin de
-# répondre en clair sur le port 80 pour valider le domaine avant que le
-# certificat n'existe. Une fois le certificat émis, la section tls ci-dessous
-# suffit à servir en HTTPS ; une redirection globale HTTP->HTTPS peut être
-# ajoutée plus tard via un Middleware Traefik dédié une fois le certificat
-# confirmé opérationnel.
+# Le TLS public N'EST PAS géré ici : ce VPS a Caddy en frontal sur les
+# ports 80/443 (déjà utilisé par Diarra), qui obtient lui-même un vrai
+# certificat Let's Encrypt pour api.abmcy.com et fait suivre en HTTP
+# clair vers ingress-nginx (NodePort 30080) avec le header Host fixé —
+# voir le bloc `api.abmcy.com { reverse_proxy 127.0.0.1:30080 ... }`
+# ajouté dans /etc/caddy/Caddyfile sur le VPS. cert-manager n'est donc
+# pas utilisé pour ce domaine (il reste installé sur le cluster : il ne
+# fait de mal à personne, mais aucune Certificate ne le référence ici).
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: api-ingress
   namespace: abmcy
-  annotations:
-    cert-manager.io/cluster-issuer: letsencrypt-prod
 spec:
-  ingressClassName: traefik
-  tls:
-    - hosts:
-        - api.abmcy.com
-      secretName: api-abmcy-com-tls
+  ingressClassName: nginx
   rules:
     - host: api.abmcy.com
       http:

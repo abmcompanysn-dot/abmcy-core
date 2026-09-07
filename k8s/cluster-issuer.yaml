@@ -1,4 +1,15 @@
 # ClusterIssuer cert-manager pour Let's Encrypt (production).
+#
+# NON UTILISÉ dans le déploiement actuel sur diarra-vps : ce VPS a Caddy
+# en frontal sur les ports 80/443 (déjà utilisé par le projet Diarra),
+# qui obtient lui-même le certificat de api.abmcy.com — voir le
+# commentaire en tête de k8s/ingress.yaml. cert-manager reste installé
+# sur ce cluster (inoffensif) mais ce ClusterIssuer n'est référencé par
+# aucune Certificate. Gardé pour un futur déploiement sur un cluster où
+# ingress-nginx recevrait directement le trafic 80/443 (pas de Caddy
+# devant) — dans ce cas, remettre l'annotation
+# cert-manager.io/cluster-issuer + la section tls: dans l'Ingress.
+#
 # Suppose que cert-manager est déjà installé dans le cluster (voir
 # k8s/README.md pour la commande d'installation) — ce n'est PAS un
 # CRD standard de Kubernetes, il vient du contrôleur cert-manager.
@@ -24,4 +35,7 @@ spec:
     solvers:
       - http01:
           ingress:
-            class: traefik
+            # nginx, pas traefik : ce cluster utilise ingress-nginx comme
+            # contrôleur (installé aux côtés du projet Diarra déjà présent
+            # sur ce VPS), pas le Traefik livré par défaut avec un k3s "stock".
+            class: nginx

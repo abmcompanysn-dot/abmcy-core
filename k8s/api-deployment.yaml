@@ -1,14 +1,15 @@
 # Deployment du binaire Go (modulith unique, cmd/api/main.go).
-# Budget ressources du VPS (4 CPU / 6 Go RAM), partagé avec Postgres
-# (jusqu'à 1.5 CPU / 1.5Gi) et l'overhead k3s (containerd, Traefik,
-# cert-manager, kubelet ≈ 0.3-0.5 CPU / 300-500Mi) :
-#   2 replicas API x (limit 750m CPU / 512Mi RAM) = 1.5 CPU / 1Gi max
-#   + Postgres 1.5 CPU / 1.5Gi max
-#   + overhead k3s ~0.5 CPU / 0.5Gi
-#   = 3.5 CPU / 3Gi au pic — reste de la marge sur les 4 CPU / 6 Go du VPS.
-# 2 replicas permettent un rolling update sans coupure de service et un peu
-# de tolérance si un pod crashe. Le binaire est stateless (toute donnée
-# persistante est dans Postgres), donc scaler à 2 est sûr.
+#
+# ATTENTION : ce VPS (diarra-vps, 4 CPU / 7.8 Go RAM) héberge déjà un
+# autre projet ("Diarra") tournant dans le namespace k3s "diarra"
+# (backend 2 répliques, Postgres, Redis, MinIO — ~40% CPU / 25% RAM déjà
+# utilisés en usage réel constaté avant même de déployer ABMCY). ABMCY
+# vit dans son propre namespace ("abmcy") à côté, sans y toucher, mais
+# partage le même nœud physique — les requests/limits ci-dessous sont
+# volontairement modestes pour rester un bon voisin. 2 répliques restent
+# raisonnables ici car les requests par pod sont faibles (100m CPU/128Mi
+# chacun, 200m/256Mi au total pour les deux) ; permet un rolling update
+# sans coupure de service.
 apiVersion: apps/v1
 kind: Deployment
 metadata:

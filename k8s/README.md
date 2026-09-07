@@ -6,6 +6,19 @@ VPS (4 CPU / 6 Go RAM). **`docker-compose.yml` n'est pas supprimé** — il rest
 déploiement recommandé à partir de maintenant. Vous pouvez le retirer
 vous-même une fois `k8s/` validé en production.
 
+> **État réel du déploiement de production (diarra-vps, 169.58.214.115) :**
+> ce VPS héberge déjà un autre projet ("Diarra") avec son propre reverse-proxy
+> Caddy occupant les ports 80/443 et son propre namespace k3s (`diarra`).
+> ABMCY vit dans le namespace `abmcy`, à côté, sans y toucher. Conséquence :
+> le contrôleur Ingress de ce cluster est **ingress-nginx** (pas Traefik —
+> installé par l'autre projet), et le TLS public de `api.abmcy.com` est
+> **géré par Caddy** (bloc dédié ajouté dans `/etc/caddy/Caddyfile` sur le
+> VPS, hors de ce repo), pas par cert-manager. `k8s/ingress.yaml` et
+> `k8s/cluster-issuer.yaml` reflètent cette réalité — voir leurs commentaires
+> en tête de fichier. Le reste de ce README décrit le chemin "k3s stock"
+> (Traefik + cert-manager par défaut), valable pour un VPS neuf sans projet
+> préexistant ; adaptez selon ce que vous trouvez déjà en place.
+
 Le `Dockerfile` à la racine du repo reste inchangé et sert toujours à builder
 l'image de l'API — k3s le réutilise tel quel.
 
