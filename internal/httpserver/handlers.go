@@ -687,7 +687,12 @@ func (s *Server) handleSetStaffActive(w http.ResponseWriter, r *http.Request) {
 // --- Super-admin (platform configuration: R2, Resend, CinetPay) ---------
 
 func (s *Server) handleAdminGetConfig(w http.ResponseWriter, r *http.Request) {
-	response.JSON(w, http.StatusOK, s.config.StatusAll())
+	statuses, err := s.config.StatusAll(r.Context())
+	if err != nil {
+		response.Err(w, err)
+		return
+	}
+	response.JSON(w, http.StatusOK, statuses)
 }
 
 func (s *Server) handleAdminSetConfig(w http.ResponseWriter, r *http.Request) {

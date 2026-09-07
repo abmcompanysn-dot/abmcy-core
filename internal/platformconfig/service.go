@@ -158,18 +158,48 @@ type Status struct {
 	Value      string `json:"value,omitempty"` // only populated for non-secret keys
 }
 
-func (s *Service) StatusAll() []Status {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+// StatusAll reads straight from Postgres rather than the in-memory
+// cache: with more than one API replica, each pod's cache only reflects
+// the writes it personally handled (Set updates the writer's own cache,
+// never the other replicas'), so a GET landing on a different pod than
+// the last PUT could show a stale "not configured" for a key that was
+// just set. This endpoint is called rarely (from the admin dashboard),
+// so the extra round trip is cheap — Get, on the hot path for every
+// upload/email/payment, keeps using the cache for speed.
+func (s *Service) StatusAll(ctx context.Context) ([]Status, error) {
+	current := make(map[Key]string)
+	err := s.pool.WithSystem(ctx, func(ctx context.Context, tx db.TxLike) error {
+		rows, err := tx.Query(ctx, `SELECT key, value_encrypted FROM platform_config`)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var key string
+			var encrypted []byte
+			if err := rows.Scan(&key, &encrypted); err != nil {
+				return err
+			}
+			plaintext, err := s.cryptor.decrypt(encrypted)
+			if err != nil {
+				return fmt.Errorf("decrypt key %s: %w", key, err)
+			}
+			current[Key(key)] = plaintext
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		return nil, fmt.Errorf("platformconfig: status all: %w", err)
+	}
 
 	out := make([]Status, 0, len(AllKeys))
 	for _, k := range AllKeys {
-		v, ok := s.cache[k]
+		v, ok := current[k]
 		st := Status{Key: k, Configured: ok && v != ""}
 		if st.Configured && !IsSecret(k) {
 			st.Value = v
 		}
 		out = append(out, st)
 	}
-	return out
+	return out, nil
 }
