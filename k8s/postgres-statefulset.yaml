@@ -1,0 +1,111 @@
+# StatefulSet Postgres (1 seule replica : pas de cluster HA Postgres ici,
+# le VPS est mono-nœud). Un StatefulSet est préféré à un Deployment pour
+# garantir une identité réseau stable et un attachement PVC fiable en cas
+# de redémarrage du pod.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: abmcy
+  labels:
+    app: postgres
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - containerPort: 5432
+              name: postgres
+          env:
+            - name: POSTGRES_DB
+              value: abmcy
+            - name: POSTGRES_USER
+              value: abmcy_app
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: abmcy-secrets
+                  key: POSTGRES_PASSWORD
+            # PGDATA dans un sous-dossier du volume : évite l'erreur
+            # "lost+found" que Postgres refuse au démarrage quand le
+            # point de montage racine d'un volume local-path contient déjà
+            # des fichiers/dossiers système.
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - name: pgdata
+              mountPath: /var/lib/postgresql/data
+            - name: postgres-init
+              mountPath: /docker-entrypoint-initdb.d
+              readOnly: true
+          resources:
+            # Cohérent avec docker-compose.yml (1.5 CPU / 1.5Gi max) : sur un
+            # VPS 4 CPU / 6 Go partagé avec l'API, on garde de la marge pour
+            # l'OS, k3s lui-même (containerd, Traefik, cert-manager) et l'API.
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "1500m"
+              memory: "1536Mi"
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "abmcy_app", "-d", "abmcy"]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "abmcy_app", "-d", "abmcy"]
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 5
+      volumes:
+        - name: postgres-init
+          configMap:
+            name: postgres-init
+  # PVC géré automatiquement par le StatefulSet (un par replica, recréé à
+  # l'identique si le pod est recréé — les données survivent).
+  volumeClaimTemplates:
+    - metadata:
+        name: pgdata
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        # local-path : le provisioner de stockage par défaut de k3s, basé
+        # sur le disque local du nœud. Suffisant pour un seul VPS mono-nœud
+        # (pas de stockage réseau distribué disponible/nécessaire ici).
+        storageClassName: local-path
+        resources:
+          requests:
+            storage: 5Gi
+---
+# Service ClusterIP interne : seule l'API (dans le même namespace/cluster)
+# doit pouvoir joindre Postgres. Pas de type LoadBalancer/NodePort — la base
+# ne doit jamais être exposée en dehors du cluster, comme avec le bind
+# 127.0.0.1 de docker-compose.yml.
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: abmcy
+  labels:
+    app: postgres
+spec:
+  type: ClusterIP
+  clusterIP: None # Service headless : requis/recommandé pour un StatefulSet
+  selector:
+    app: postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432

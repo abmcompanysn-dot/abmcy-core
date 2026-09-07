@@ -1,0 +1,49 @@
+# Déploiement VPS (4 CPU / 6 Go RAM) : un seul binaire Go (modulith) +
+# Postgres. Le stockage d'images ne consomme pas de disque local (imgbb),
+# donc pas de volume S3/MinIO à gérer ici.
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: abmcy
+      POSTGRES_USER: abmcy_app
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d
+    ports:
+      - "127.0.0.1:5432:5432" # bind local uniquement, pas exposé publiquement
+    deploy:
+      resources:
+        limits:
+          cpus: "1.5"
+          memory: 1.5g
+
+  api:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    environment:
+      APP_ENV: production
+      PORT: 8080
+      DATABASE_URL: postgres://abmcy_app:${POSTGRES_PASSWORD}@postgres:5432/abmcy?sslmode=disable
+      JWT_SECRET: ${JWT_SECRET}
+      IMGBB_API_KEY: ${IMGBB_API_KEY}
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      RESEND_FROM_ADDR: ${RESEND_FROM_ADDR}
+      CINETPAY_API_KEY: ${CINETPAY_API_KEY}
+      CINETPAY_SITE_ID: ${CINETPAY_SITE_ID}
+      ADMIN_API_KEY: ${ADMIN_API_KEY}
+      CORS_ORIGINS: https://dash.abmcy.com,https://ad.abmcy.com
+    ports:
+      - "127.0.0.1:8080:8080" # reverse-proxied par Caddy/Nginx en HTTPS sur api.abmcy.com
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 1g
+
+volumes:
+  pgdata:

@@ -1,0 +1,5 @@
+# Reverse proxy HTTPS pour l'API sur le VPS.
+# Caddy gère automatiquement le certificat TLS (Let's Encrypt) pour api.abmcy.com.
+api.abmcy.com {
+	reverse_proxy localhost:8080
+}

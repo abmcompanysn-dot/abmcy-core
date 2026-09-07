@@ -1,0 +1,23 @@
+# Go
+/bin/
+*.exe
+*.test
+*.out
+
+# Env réels (jamais commiter de vraies clés — seuls les .env.example le sont)
+.env
+.env.local
+*.env
+!.env.example
+!**/.env.example
+
+# Node / Next.js (chaque sous-projet a aussi le sien, redondance volontaire)
+node_modules/
+.next/
+out/
+
+# Éditeurs / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

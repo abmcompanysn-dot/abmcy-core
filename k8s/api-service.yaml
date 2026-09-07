@@ -1,0 +1,17 @@
+# Service ClusterIP interne pour l'API — c'est l'Ingress Traefik qui expose
+# publiquement ce Service sur api.abmcy.com (voir k8s/ingress.yaml).
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+  namespace: abmcy
+  labels:
+    app: api
+spec:
+  type: ClusterIP
+  selector:
+    app: api
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080

@@ -1,0 +1,23 @@
+# Permet de tout déployer en une seule commande : kubectl apply -k k8s/
+#
+# secrets-example.yaml et cluster-issuer.yaml sont volontairement EXCLUS
+# de cette liste :
+#   - secrets-example.yaml ne contient que des placeholders (voir le fichier
+#     pour la marche à suivre) — il ne doit jamais écraser le vrai secret.
+#   - cluster-issuer.yaml crée une ressource cluster-scoped (ClusterIssuer)
+#     qui dépend de cert-manager déjà installé ; on l'applique séparément
+#     une seule fois (voir k8s/README.md) pour éviter un échec de
+#     `kubectl apply -k k8s/` sur un cluster où cert-manager n'est pas
+#     encore prêt.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: abmcy
+
+resources:
+  - namespace.yaml
+  - postgres-init-configmap.yaml
+  - postgres-statefulset.yaml
+  - api-deployment.yaml
+  - api-service.yaml
+  - ingress.yaml

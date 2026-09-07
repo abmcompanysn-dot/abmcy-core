@@ -1,0 +1,27 @@
+# ClusterIssuer cert-manager pour Let's Encrypt (production).
+# Suppose que cert-manager est déjà installé dans le cluster (voir
+# k8s/README.md pour la commande d'installation) — ce n'est PAS un
+# CRD standard de Kubernetes, il vient du contrôleur cert-manager.
+#
+# ClusterIssuer (et non Issuer) car il n'est pas limité à un seul
+# namespace : réutilisable si d'autres namespaces/ingress apparaissent
+# plus tard sur ce cluster.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    # IMPORTANT : remplacer par une vraie adresse email de contact ABMCY —
+    # Let's Encrypt l'utilise pour prévenir en cas de problème (expiration,
+    # révocation, etc.), elle n'est pas publiée ailleurs.
+    email: admin@abmcy.com
+    privateKeySecretRef:
+      # Secret créé/géré automatiquement par cert-manager (clé de compte
+      # ACME) — ne pas confondre avec abmcy-secrets.
+      name: letsencrypt-prod-account-key
+    solvers:
+      - http01:
+          ingress:
+            class: traefik

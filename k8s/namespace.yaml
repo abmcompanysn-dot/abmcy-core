@@ -1,0 +1,7 @@
+# Namespace dédié à ABMCY Core Multi-Tenant.
+# Isole toutes les ressources (Postgres, API, secrets, ingress) du reste
+# du cluster k3s, même si ce cluster n'héberge que ce projet pour l'instant.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: abmcy

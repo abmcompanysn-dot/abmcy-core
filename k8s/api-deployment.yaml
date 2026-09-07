@@ -1,0 +1,118 @@
+# Deployment du binaire Go (modulith unique, cmd/api/main.go).
+# Budget ressources du VPS (4 CPU / 6 Go RAM), partagé avec Postgres
+# (jusqu'à 1.5 CPU / 1.5Gi) et l'overhead k3s (containerd, Traefik,
+# cert-manager, kubelet ≈ 0.3-0.5 CPU / 300-500Mi) :
+#   2 replicas API x (limit 750m CPU / 512Mi RAM) = 1.5 CPU / 1Gi max
+#   + Postgres 1.5 CPU / 1.5Gi max
+#   + overhead k3s ~0.5 CPU / 0.5Gi
+#   = 3.5 CPU / 3Gi au pic — reste de la marge sur les 4 CPU / 6 Go du VPS.
+# 2 replicas permettent un rolling update sans coupure de service et un peu
+# de tolérance si un pod crashe. Le binaire est stateless (toute donnée
+# persistante est dans Postgres), donc scaler à 2 est sûr.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: abmcy
+  labels:
+    app: api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: api
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0 # jamais 0 pod disponible pendant un déploiement
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      containers:
+        - name: api
+          # Image buildée localement depuis le Dockerfile existant et chargée
+          # dans containerd (k3s ctr images import) — voir k8s/README.md.
+          image: abmcy/core-api:latest
+          # IfNotPresent : évite que k3s essaie de pull depuis un registry
+          # distant puisque l'image est chargée localement via containerd.
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+              name: http
+          env:
+            - name: APP_ENV
+              value: production
+            - name: PORT
+              value: "8080"
+            - name: CORS_ORIGINS
+              value: "https://dash.abmcy.com,https://ad.abmcy.com"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: abmcy-secrets
+                  key: DATABASE_URL
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: abmcy-secrets
+                  key: JWT_SECRET
+            - name: IMGBB_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: abmcy-secrets
+                  key: IMGBB_API_KEY
+            - name: RESEND_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: abmcy-secrets
+                  key: RESEND_API_KEY
+            - name: RESEND_FROM_ADDR
+              valueFrom:
+                secretKeyRef:
+                  name: abmcy-secrets
+                  key: RESEND_FROM_ADDR
+            - name: CINETPAY_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: abmcy-secrets
+                  key: CINETPAY_API_KEY
+            - name: CINETPAY_SITE_ID
+              valueFrom:
+                secretKeyRef:
+                  name: abmcy-secrets
+                  key: CINETPAY_SITE_ID
+            - name: ADMIN_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: abmcy-secrets
+                  key: ADMIN_API_KEY
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "750m"
+              memory: "512Mi"
+          # readiness : retire le pod du Service tant qu'il n'a pas répondu
+          # une première fois — utile pendant un rolling update.
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 3
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          # liveness : redémarre le pod s'il devient injoignable durablement
+          # (deadlock applicatif, connexion DB bloquée, etc.).
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 3
+            failureThreshold: 3
