@@ -158,6 +158,25 @@ Domaines confirmés (2026-09-07) :
   **Pas encore fait : aucun dashboard/frontend ne consomme ces routes
   (`/auth/customer/*`) — c'est un backend prêt sans interface pour
   l'instant.**
+- **Emails transactionnels au-delà du reset de mot de passe** (2026-09-07,
+  l'utilisateur a demandé confirmation que "les services de message" sont
+  bien gérés pour un tenant). Deux emails ajoutés, tous deux best-effort
+  (un échec d'envoi — Resend non configuré, quota épuisé — ne fait jamais
+  échouer l'action métier qui le déclenche, seulement loggé via `slog`) :
+  - **Bienvenue tenant** : `tenants.contact_email` (nouvelle colonne,
+    `internal/tenant.Create` prend maintenant `contactEmail` en paramètre)
+    reçoit un email à la création depuis `handleAdminCreateTenant` — ne
+    contient JAMAIS la clé secrète (`api_key_secret`), qui reste affichée
+    une seule fois dans le dashboard admin uniquement.
+  - **Confirmation de commande** : le client final reçoit un email si
+    `order.CustomerEmail` est renseigné, déclenché depuis
+    `handleCreateOrder` et `handleCreateCustomOrder` via
+    `sendOrderConfirmationEmail` (fonction partagée dans
+    `internal/httpserver/handlers.go`).
+  N'ont PAS été ajoutés (à discuter si besoin) : notification tenant à
+  chaque nouvelle commande reçue, email à chaque changement de statut de
+  commande, notification quand le quota de stockage/email approche de sa
+  limite.
 
 ## État d'avancement
 

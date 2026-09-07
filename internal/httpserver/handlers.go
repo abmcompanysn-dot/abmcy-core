@@ -1,8 +1,11 @@
 package httpserver
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 
 	"github.com/abmcy/core/internal/catalog"
@@ -48,7 +51,25 @@ func (s *Server) handleCreateOrder(w http.ResponseWriter, r *http.Request) {
 		response.Err(w, err)
 		return
 	}
+	s.sendOrderConfirmationEmail(r.Context(), t.ID, o)
 	response.JSON(w, http.StatusCreated, o)
+}
+
+// sendOrderConfirmationEmail notifies the end customer that their order
+// was recorded — best-effort: no customer email, no Resend configured,
+// or quota exhausted must never fail the order itself, which is already
+// safely persisted at this point.
+func (s *Server) sendOrderConfirmationEmail(ctx context.Context, tenantID uuid.UUID, o *order.Order) {
+	if o.CustomerEmail == "" {
+		return
+	}
+	html := "<p>Bonjour " + o.CustomerName + ",</p>" +
+		"<p>Votre commande <strong>" + o.OrderNumber + "</strong> a bien été enregistrée " +
+		"pour un montant de " + fmt.Sprintf("%d", o.TotalAmount) + " FCFA.</p>" +
+		"<p>Nous vous tiendrons informé(e) de son avancement.</p>"
+	if err := s.notifications.SendEmail(ctx, tenantID, o.CustomerEmail, "Confirmation de votre commande "+o.OrderNumber, html, "order_confirmation"); err != nil {
+		slog.Error("order confirmation email failed to send", "tenant_id", tenantID, "order_id", o.ID, "error", err)
+	}
 }
 
 func (s *Server) handleListOrders(w http.ResponseWriter, r *http.Request) {
@@ -178,6 +199,7 @@ func (s *Server) handleCreateCustomOrder(w http.ResponseWriter, r *http.Request)
 		response.Err(w, err)
 		return
 	}
+	s.sendOrderConfirmationEmail(r.Context(), t.ID, o)
 	response.JSON(w, http.StatusCreated, o)
 }
 
@@ -445,6 +467,7 @@ func (s *Server) handleAdminCreateTenant(w http.ResponseWriter, r *http.Request)
 	var body struct {
 		Name         string `json:"name"`
 		Slug         string `json:"slug"`
+		ContactEmail string `json:"contact_email"`
 		BusinessType string `json:"business_type"`
 	}
 	if err := decodeJSON(r, &body); err != nil {
@@ -452,11 +475,26 @@ func (s *Server) handleAdminCreateTenant(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	result, err := s.tenants.Create(r.Context(), body.Name, body.Slug, body.BusinessType)
+	result, err := s.tenants.Create(r.Context(), body.Name, body.Slug, body.ContactEmail, body.BusinessType)
 	if err != nil {
 		response.Err(w, err)
 		return
 	}
+
+	// Best-effort : la clé secrète n'est JAMAIS envoyée par email (elle ne
+	// s'affiche qu'une fois dans le dashboard admin) — cet email confirme
+	// juste la création et oriente vers la connexion. Un échec d'envoi ne
+	// doit pas faire échouer la création du tenant elle-même.
+	if body.ContactEmail != "" {
+		html := "<p>Bonjour " + result.Tenant.Name + ",</p>" +
+			"<p>Votre espace ABMCY a été créé. Connectez-vous sur <a href=\"https://dash.abmcy.com\">dash.abmcy.com</a> " +
+			"avec les identifiants qui vous ont été communiqués.</p>"
+		if sendErr := s.notifications.SendEmail(r.Context(), result.Tenant.ID, body.ContactEmail,
+			"Bienvenue sur ABMCY", html, "tenant_welcome"); sendErr != nil {
+			slog.Error("tenant welcome email failed to send", "tenant_id", result.Tenant.ID, "error", sendErr)
+		}
+	}
+
 	response.JSON(w, http.StatusCreated, map[string]any{
 		"tenant":         result.Tenant,
 		"api_key_secret": result.APIKeySecret, // shown once — client must store it now

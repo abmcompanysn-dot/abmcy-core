@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"log/slog"
 	"net/http"
 
 	"github.com/abmcy/core/internal/auth"
@@ -99,10 +100,14 @@ func (s *Server) handleCustomerForgotPassword(w http.ResponseWriter, r *http.Req
 		html := "<p>Vous avez demandé la réinitialisation de votre mot de passe.</p>" +
 			"<p><a href=\"" + resetURL + "\">Cliquez ici pour choisir un nouveau mot de passe</a> (valable 1 heure).</p>" +
 			"<p>Si vous n'êtes pas à l'origine de cette demande, ignorez cet email.</p>"
-		// Best-effort : un email non configuré/en échec ne doit pas
-		// empêcher la réponse générique de partir (et ne doit pas non plus
-		// révéler que le compte existe en cas d'erreur d'envoi).
-		_ = s.notifications.SendEmail(r.Context(), t.ID, body.Email, "Réinitialisation de votre mot de passe", html, "password_reset")
+		// Best-effort côté client : un email non configuré/en échec ne
+		// doit ni empêcher la réponse générique de partir, ni révéler que
+		// le compte existe. Mais l'échec est réel et doit être visible côté
+		// ABMCY (email_logs l'enregistre déjà en "failed" ; on logge aussi
+		// ici pour que ça remonte dans les logs applicatifs/du pod).
+		if sendErr := s.notifications.SendEmail(r.Context(), t.ID, body.Email, "Réinitialisation de votre mot de passe", html, "password_reset"); sendErr != nil {
+			slog.Error("password reset email failed to send", "tenant_id", t.ID, "error", sendErr)
+		}
 	}
 
 	response.JSON(w, http.StatusOK, map[string]string{

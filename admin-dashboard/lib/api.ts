@@ -64,6 +64,7 @@ export interface Tenant {
   id: string;
   name: string;
   slug: string;
+  contact_email?: string;
   api_key_public: string;
   plan: string;
   business_type: BusinessType;
@@ -201,7 +202,12 @@ export function listTenants(adminKey: string): Promise<Tenant[]> {
 /** POST /admin/tenants — crée un nouveau tenant. */
 export function createTenant(
   adminKey: string,
-  input: { name: string; slug: string; business_type?: BusinessType }
+  input: {
+    name: string;
+    slug: string;
+    contact_email?: string;
+    business_type?: BusinessType;
+  }
 ): Promise<CreateTenantResponse> {
   return request<CreateTenantResponse>("/admin/tenants", adminKey, {
     method: "POST",

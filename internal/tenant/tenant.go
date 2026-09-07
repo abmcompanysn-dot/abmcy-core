@@ -37,6 +37,7 @@ type Tenant struct {
 	ID                uuid.UUID `json:"id"`
 	Name              string    `json:"name"`
 	Slug              string    `json:"slug"`
+	ContactEmail      string    `json:"contact_email,omitempty"`
 	APIKeyPublic      string    `json:"api_key_public"`
 	Plan              string    `json:"plan"`
 	BusinessType      string    `json:"business_type"`
@@ -66,7 +67,7 @@ type CreateResult struct {
 // Create provisions a new tenant (called from the super-admin dashboard,
 // e.g. when a new client like HANI'S signs up). Runs outside RLS since
 // no tenant context exists yet.
-func (s *Service) Create(ctx context.Context, name, slug string, businessType string) (*CreateResult, error) {
+func (s *Service) Create(ctx context.Context, name, slug, contactEmail, businessType string) (*CreateResult, error) {
 	if businessType == "" {
 		businessType = string(BusinessOther)
 	}
@@ -90,11 +91,11 @@ func (s *Service) Create(ctx context.Context, name, slug string, businessType st
 	var t Tenant
 	err = s.pool.WithSystem(ctx, func(ctx context.Context, tx db.TxLike) error {
 		row := tx.QueryRow(ctx, `
-			INSERT INTO tenants (name, slug, api_key_public, api_key_secret_hash, business_type)
-			VALUES ($1, $2, $3, $4, $5)
-			RETURNING id, name, slug, api_key_public, plan, business_type, storage_limit_bytes, storage_used_bytes, email_quota_per_day, rate_limit_per_sec, rate_limit_burst, is_active
-		`, name, slug, pubKey, string(secretHash), businessType)
-		return row.Scan(&t.ID, &t.Name, &t.Slug, &t.APIKeyPublic, &t.Plan, &t.BusinessType,
+			INSERT INTO tenants (name, slug, contact_email, api_key_public, api_key_secret_hash, business_type)
+			VALUES ($1, $2, $3, $4, $5, $6)
+			RETURNING id, name, slug, coalesce(contact_email, ''), api_key_public, plan, business_type, storage_limit_bytes, storage_used_bytes, email_quota_per_day, rate_limit_per_sec, rate_limit_burst, is_active
+		`, name, slug, contactEmail, pubKey, string(secretHash), businessType)
+		return row.Scan(&t.ID, &t.Name, &t.Slug, &t.ContactEmail, &t.APIKeyPublic, &t.Plan, &t.BusinessType,
 			&t.StorageLimitBytes, &t.StorageUsedBytes, &t.EmailQuotaPerDay, &t.RateLimitPerSec, &t.RateLimitBurst, &t.IsActive)
 	})
 	if err != nil {
@@ -110,7 +111,7 @@ func (s *Service) ListAll(ctx context.Context) ([]Tenant, error) {
 	var tenants []Tenant
 	err := s.pool.WithSystem(ctx, func(ctx context.Context, tx db.TxLike) error {
 		rows, err := tx.Query(ctx, `
-			SELECT id, name, slug, api_key_public, plan, business_type, storage_limit_bytes, storage_used_bytes, email_quota_per_day, rate_limit_per_sec, rate_limit_burst, is_active
+			SELECT id, name, slug, coalesce(contact_email, ''), api_key_public, plan, business_type, storage_limit_bytes, storage_used_bytes, email_quota_per_day, rate_limit_per_sec, rate_limit_burst, is_active
 			FROM tenants ORDER BY created_at DESC
 		`)
 		if err != nil {
@@ -119,7 +120,7 @@ func (s *Service) ListAll(ctx context.Context) ([]Tenant, error) {
 		defer rows.Close()
 		for rows.Next() {
 			var t Tenant
-			if err := rows.Scan(&t.ID, &t.Name, &t.Slug, &t.APIKeyPublic, &t.Plan, &t.BusinessType,
+			if err := rows.Scan(&t.ID, &t.Name, &t.Slug, &t.ContactEmail, &t.APIKeyPublic, &t.Plan, &t.BusinessType,
 				&t.StorageLimitBytes, &t.StorageUsedBytes, &t.EmailQuotaPerDay, &t.RateLimitPerSec, &t.RateLimitBurst, &t.IsActive); err != nil {
 				return err
 			}
