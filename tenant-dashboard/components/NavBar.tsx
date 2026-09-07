@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { useFeatures } from "@/lib/features-context";
+import { DOCS_URL } from "@/lib/api";
 
 const baseLinks = [{ href: "/", label: "Commandes" }];
 
@@ -72,12 +73,22 @@ export function NavBar() {
             )}
           </nav>
         </div>
-        <button
-          onClick={logout}
-          className="rounded-md border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900"
-        >
-          Se déconnecter
-        </button>
+        <div className="flex items-center gap-2">
+          <a
+            href={DOCS_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-md px-3 py-1.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900"
+          >
+            Documentation
+          </a>
+          <button
+            onClick={logout}
+            className="rounded-md border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900"
+          >
+            Se déconnecter
+          </button>
+        </div>
       </div>
     </header>
   );

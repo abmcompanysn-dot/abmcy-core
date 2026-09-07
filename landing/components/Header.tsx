@@ -7,6 +7,10 @@ const NAV_LINKS = [
 // dashboards déployés (ad.abmcy.com / dash.abmcy.com).
 const ADMIN_DASHBOARD_URL = "https://ad.abmcy.com";
 const TENANT_DASHBOARD_URL = "https://dash.abmcy.com";
+// Documentation d'intégration API (docs/API.md dans le repo, publiée en
+// page web) — voir DOCS_URL dans chaque app pour garder ce lien unique.
+export const DOCS_URL =
+  "https://claude.ai/code/artifact/377e23f8-72f3-4c5e-b1a9-bb636dfba484";
 
 export function Header() {
   return (
@@ -29,6 +33,14 @@ export function Header() {
               {link.label}
             </a>
           ))}
+          <a
+            href={DOCS_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="transition-colors hover:text-slate-900"
+          >
+            Documentation
+          </a>
         </nav>
 
         <div className="flex items-center gap-3">

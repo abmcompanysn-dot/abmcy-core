@@ -11,6 +11,10 @@ export const API_URL =
   process.env.NEXT_PUBLIC_API_URL?.replace(/\/+$/, "") ||
   "https://api.abmcy.com";
 
+/** Documentation d'intégration API (docs/API.md dans le repo, publiée en page web). */
+export const DOCS_URL =
+  "https://claude.ai/code/artifact/377e23f8-72f3-4c5e-b1a9-bb636dfba484";
+
 const ADMIN_KEY_STORAGE_KEY = "abmcy_admin_key";
 
 /** Lit la clé admin stockée localement (uniquement côté navigateur). */
