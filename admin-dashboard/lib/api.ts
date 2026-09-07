@@ -38,18 +38,46 @@ export function clearStoredAdminKey(): void {
   }
 }
 
+/** Type de commerce d'un tenant — indique la forme des attributs produits. */
+export type BusinessType =
+  | "couture_sur_mesure"
+  | "commerce_general"
+  | "produit_numerique"
+  | "general";
+
+/** Libellés français lisibles pour chaque type de commerce. */
+export const BUSINESS_TYPE_LABELS: Record<BusinessType, string> = {
+  couture_sur_mesure: "Couture sur-mesure",
+  commerce_general: "Commerce général",
+  produit_numerique: "Produit numérique",
+  general: "Général / non précisé",
+};
+
+export const BUSINESS_TYPES: BusinessType[] = [
+  "couture_sur_mesure",
+  "commerce_general",
+  "produit_numerique",
+  "general",
+];
+
 export interface Tenant {
   id: string;
   name: string;
   slug: string;
   api_key_public: string;
   plan: string;
+  business_type: BusinessType;
   storage_limit_bytes: number;
   storage_used_bytes: number;
   email_quota_per_day: number;
   rate_limit_per_sec: number;
   rate_limit_burst: number;
   is_active: boolean;
+}
+
+/** Indicateurs de fonctionnalités optionnelles d'un tenant (GET/PUT features). */
+export interface FeatureFlags {
+  catalog_enabled: boolean;
 }
 
 export interface CreateTenantResponse {
@@ -173,7 +201,7 @@ export function listTenants(adminKey: string): Promise<Tenant[]> {
 /** POST /admin/tenants — crée un nouveau tenant. */
 export function createTenant(
   adminKey: string,
-  input: { name: string; slug: string }
+  input: { name: string; slug: string; business_type?: BusinessType }
 ): Promise<CreateTenantResponse> {
   return request<CreateTenantResponse>("/admin/tenants", adminKey, {
     method: "POST",
@@ -189,6 +217,50 @@ export function updateTenantRateLimit(
 ): Promise<void> {
   return request<void>(
     `/admin/tenants/${encodeURIComponent(tenantId)}/rate-limit`,
+    adminKey,
+    {
+      method: "PUT",
+      body: JSON.stringify(input),
+    }
+  );
+}
+
+/** PUT /admin/tenants/{tenantID}/business-type — modifie le type de commerce d'un tenant. */
+export function updateTenantBusinessType(
+  adminKey: string,
+  tenantId: string,
+  businessType: BusinessType
+): Promise<void> {
+  return request<void>(
+    `/admin/tenants/${encodeURIComponent(tenantId)}/business-type`,
+    adminKey,
+    {
+      method: "PUT",
+      body: JSON.stringify({ business_type: businessType }),
+    }
+  );
+}
+
+/** GET /admin/tenants/{tenantID}/features — lit les fonctionnalités optionnelles d'un tenant. */
+export function getTenantFeatures(
+  adminKey: string,
+  tenantId: string
+): Promise<FeatureFlags> {
+  return request<FeatureFlags>(
+    `/admin/tenants/${encodeURIComponent(tenantId)}/features`,
+    adminKey,
+    { method: "GET" }
+  );
+}
+
+/** PUT /admin/tenants/{tenantID}/features — active ou désactive le catalogue pour un tenant. */
+export function updateTenantFeatures(
+  adminKey: string,
+  tenantId: string,
+  input: FeatureFlags
+): Promise<void> {
+  return request<void>(
+    `/admin/tenants/${encodeURIComponent(tenantId)}/features`,
     adminKey,
     {
       method: "PUT",

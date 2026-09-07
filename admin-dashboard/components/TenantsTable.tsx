@@ -1,14 +1,18 @@
-import type { Tenant } from "@/lib/api";
+import type { BusinessType, Tenant } from "@/lib/api";
 import { StorageBar } from "./StorageBar";
 import { StatusBadge } from "./StatusBadge";
 import { RateLimitEditor } from "./RateLimitEditor";
+import { BusinessTypeEditor } from "./BusinessTypeEditor";
+import { CatalogToggle } from "./CatalogToggle";
 
 export function TenantsTable({
   tenants,
   onRateLimitSaved,
+  onBusinessTypeSaved,
 }: {
   tenants: Tenant[];
   onRateLimitSaved?: (tenantId: string, perSec: number, burst: number) => void;
+  onBusinessTypeSaved?: (tenantId: string, businessType: BusinessType) => void;
 }) {
   if (tenants.length === 0) {
     return (
@@ -30,6 +34,8 @@ export function TenantsTable({
             <th className="px-4 py-3 font-medium">Stockage</th>
             <th className="px-4 py-3 font-medium">Quota email / jour</th>
             <th className="px-4 py-3 font-medium">Limite de trafic</th>
+            <th className="px-4 py-3 font-medium">Type de commerce</th>
+            <th className="px-4 py-3 font-medium">Catalogue</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
@@ -67,6 +73,18 @@ export function TenantsTable({
                     onRateLimitSaved?.(t.id, perSec, burst)
                   }
                 />
+              </td>
+              <td className="px-4 py-3">
+                <BusinessTypeEditor
+                  tenantId={t.id}
+                  businessType={t.business_type}
+                  onSaved={(businessType) =>
+                    onBusinessTypeSaved?.(t.id, businessType)
+                  }
+                />
+              </td>
+              <td className="px-4 py-3">
+                <CatalogToggle tenantId={t.id} />
               </td>
             </tr>
           ))}

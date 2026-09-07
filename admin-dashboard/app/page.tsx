@@ -2,7 +2,12 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
-import { ApiError, listTenants, type Tenant } from "@/lib/api";
+import {
+  ApiError,
+  listTenants,
+  type BusinessType,
+  type Tenant,
+} from "@/lib/api";
 import { CreateTenantForm } from "@/components/CreateTenantForm";
 import { TenantsTable } from "@/components/TenantsTable";
 
@@ -83,6 +88,16 @@ export default function TenantsPage() {
     );
   }
 
+  function handleBusinessTypeSaved(tenantId: string, businessType: BusinessType) {
+    setTenants((prev) =>
+      prev
+        ? prev.map((t) =>
+            t.id === tenantId ? { ...t, business_type: businessType } : t
+          )
+        : prev
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -117,6 +132,7 @@ export default function TenantsPage() {
         <TenantsTable
           tenants={tenants ?? []}
           onRateLimitSaved={handleRateLimitSaved}
+          onBusinessTypeSaved={handleBusinessTypeSaved}
         />
       )}
     </div>
