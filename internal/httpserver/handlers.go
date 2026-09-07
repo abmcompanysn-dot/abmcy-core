@@ -713,10 +713,14 @@ func (s *Server) handleAdminSetConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// updatedBy is left as the zero UUID until admin dashboard accounts
-	// exist (see internal/auth) — platform_config.updated_by is nullable
-	// and this is filled in properly once admin users are real rows.
-	if err := s.config.Set(r.Context(), key, body.Value, uuid.Nil); err != nil {
+	// updatedBy is the connected admin's user ID when authenticated via
+	// JWT login, or nil when authenticated via the static X-Admin-Key
+	// (no individual identity to attach in that case).
+	var updatedBy *uuid.UUID
+	if claims, ok := adminClaimsFromContext(r.Context()); ok {
+		updatedBy = &claims.UserID
+	}
+	if err := s.config.Set(r.Context(), key, body.Value, updatedBy); err != nil {
 		response.Err(w, err)
 		return
 	}

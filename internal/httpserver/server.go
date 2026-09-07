@@ -233,12 +233,24 @@ func (s *Server) requireCatalog(next http.Handler) http.Handler {
 // kept as a bootstrap fallback so a fresh deployment with no admin
 // account yet isn't locked out of the dashboard. Once at least one admin
 // account exists, the dashboard should use the JWT path exclusively.
+type adminClaimsCtxKey struct{}
+
+// adminClaimsFromContext returns the authenticated admin's claims when the
+// request came in via JWT login — false when authenticated via the static
+// X-Admin-Key instead, which has no individual identity to attach to
+// audit fields like platform_config.updated_by.
+func adminClaimsFromContext(ctx context.Context) (*auth.AdminClaims, bool) {
+	c, ok := ctx.Value(adminClaimsCtxKey{}).(*auth.AdminClaims)
+	return c, ok
+}
+
 func (s *Server) adminAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if auth := r.Header.Get("Authorization"); strings.HasPrefix(auth, "Bearer ") {
 			token := strings.TrimPrefix(auth, "Bearer ")
-			if _, err := s.authSvc.ParseAdminToken(token); err == nil {
-				next.ServeHTTP(w, r)
+			if claims, err := s.authSvc.ParseAdminToken(token); err == nil {
+				ctx := context.WithValue(r.Context(), adminClaimsCtxKey{}, claims)
+				next.ServeHTTP(w, r.WithContext(ctx))
 				return
 			}
 		}

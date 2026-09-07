@@ -121,7 +121,11 @@ func (s *Service) Get(key Key) (string, bool) {
 
 // Set writes one key (encrypted) and refreshes the in-memory cache so the
 // change is live immediately, without a redeploy or restart.
-func (s *Service) Set(ctx context.Context, key Key, value string, updatedBy uuid.UUID) error {
+// updatedBy is nil when the request was authenticated via the static
+// X-Admin-Key rather than an individual admin JWT — there's no per-user
+// identity to attach in that case, and platform_config.updated_by is
+// nullable precisely for this.
+func (s *Service) Set(ctx context.Context, key Key, value string, updatedBy *uuid.UUID) error {
 	encrypted, err := s.cryptor.encrypt(value)
 	if err != nil {
 		return fmt.Errorf("platformconfig: encrypt: %w", err)
