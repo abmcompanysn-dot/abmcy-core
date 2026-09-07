@@ -194,15 +194,20 @@ Domaines confirmés (2026-09-07) :
   - Scopées JWT client (`customerAuth`) : `POST /auth/customer/logout`,
     `GET/PATCH /auth/customer/me`
   - `POST /webhooks/cinetpay/{tenantSlug}`
-  - Scopées `X-API-Key` : `GET /features`, `POST/GET /orders`,
+  - Scopées `staffAuth` (`X-API-Key` **ou** JWT staff, voir décisions
+    ci-dessus) : `GET /features`, `POST/GET /orders`,
     `GET/PATCH /orders/{id}`, `GET /orders/{id}/history`,
     `POST /custom-orders`, `POST /measurements`, `POST /uploads/image`,
     `POST /payments/init`, `POST /notifications/email`
-  - Scopées `X-API-Key` + catalogue activé (`requireCatalog`) :
+  - Scopées `staffAuth` + catalogue activé (`requireCatalog`) :
     `GET/POST /products`, `GET /products/{id}`, `GET/POST /fabrics`,
     `POST /fabrics/upload`, `GET/POST /gallery`, `GET/POST /cart`,
     `DELETE /cart/{itemID}`, `POST /reviews`, `GET /reviews`,
     `GET /reviews/pending`, `POST /reviews/{id}/publish`
+  - Scopées `staffAuth` + JWT staff obligatoire (`requireStaffJWT`, pas
+    de repli `X-API-Key` — une intégration externe n'a pas d'identité
+    humaine) : `POST /auth/logout`, `GET/POST /staff`,
+    `PUT /staff/{userID}/active`
   - `POST /admin/auth/login` (email/mot de passe super-admin -> JWT)
   - Scopées `adminAuth` (JWT admin **ou** `X-Admin-Key` en secours
     bootstrap) : `GET/POST /admin/accounts`,
@@ -288,11 +293,32 @@ d'étape ni tout lancer en parallèle sans validation :
    routes** — ni un futur site storefront public pour les clients de
    HANI'S (n'existe pas), ni le tenant-dashboard (qui reste un outil pour
    le personnel, pas pour les clients finaux).
-7. Personnel tenant : comptes individuels login/mot de passe pour
-   l'équipe d'un tenant comme HANI'S (au lieu de la clé API `X-API-Key`
-   partagée) — demandé explicitement, priorité placée après l'auth
-   client. Pas encore commencé ; `POST /auth/login` existe déjà pour les
-   `users` scopés à un tenant mais `tenant-dashboard/` ne l'utilise pas.
+7. ~~Personnel tenant : comptes individuels login/mot de passe~~ — **fait
+   côté backend (2026-09-07)**. Décision explicite : `X-API-Key` reste
+   réservée à l'intégration technique externe (ex: le site de HANI'S) —
+   pas de repli temporaire ici comme pour l'admin, c'est une séparation
+   d'usage durable. Toutes les routes tenant-scopées (`/orders`,
+   `/products`, etc.) acceptent maintenant **soit** `X-API-Key` **soit**
+   un JWT staff (`httpserver.staffAuth`, distingue les deux par la
+   présence de deux points `.` dans le Bearer token — un JWT en a
+   toujours exactement deux, une clé `pk_live_...` jamais). Nouveau :
+   - `tenant.Service.Create` crée maintenant, dans la même opération, le
+     premier compte `owner` du tenant (email/mot de passe fournis par
+     l'admin ABMCY à la création) — **sans ça, personne n'aurait jamais
+     pu se connecter par mot de passe sur un nouveau tenant**, trou
+     détecté et comblé avant de brancher les routes staff.
+   - `internal/auth/service.go` : `Logout` (révocation par jti, même
+     mécanisme que `LogoutCustomer`), `CreateStaffUser`/`ListStaffUsers`/
+     `SetStaffUserActive` (gestion d'équipe, réservée au rôle `owner`
+     — vérifié dans les handlers, pas dans le service).
+   - Nouvelles routes tenant-scopées, réservées au JWT staff
+     (`requireStaffJWT` — une intégration `X-API-Key` n'a pas d'identité
+     humaine à révoquer ni de droit à accorder) : `POST /auth/logout`,
+     `GET/POST /staff`, `PUT /staff/{userID}/active`.
+   `go build`/`go vet` OK. **Le dashboard admin ne demande pas encore
+   l'email/mot de passe du propriétaire à la création d'un tenant, et
+   `tenant-dashboard/` utilise toujours `X-API-Key` — aucun frontend ne
+   consomme encore ce nouveau flux.**
 8. Monitoring + alertes de sécurité (email en cas d'anomalie : pics
    d'erreurs, échecs de connexion répétés, quota dépassé) — pas commencé.
 9. Sitemap XML (référencement `landing/`) + flux XML produits par tenant

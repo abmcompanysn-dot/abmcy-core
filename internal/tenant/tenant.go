@@ -65,14 +65,24 @@ type CreateResult struct {
 }
 
 // Create provisions a new tenant (called from the super-admin dashboard,
-// e.g. when a new client like HANI'S signs up). Runs outside RLS since
-// no tenant context exists yet.
-func (s *Service) Create(ctx context.Context, name, slug, contactEmail, businessType string) (*CreateResult, error) {
+// e.g. when a new client like HANI'S signs up) AND its first staff
+// account ("owner"), so someone can actually log into tenant-dashboard
+// right away — without an owner row, login/password auth would have no
+// account to authenticate against. ownerEmail/ownerPassword are required
+// together; pass both empty to skip creating an owner (not recommended,
+// but kept possible for scripts/tests that only need the API key).
+func (s *Service) Create(ctx context.Context, name, slug, contactEmail, businessType, ownerEmail, ownerPassword string) (*CreateResult, error) {
 	if businessType == "" {
 		businessType = string(BusinessOther)
 	}
 	if !ValidBusinessType(businessType) {
 		return nil, apierror.ErrValidation
+	}
+	if (ownerEmail == "") != (ownerPassword == "") {
+		return nil, apierror.New(422, "validation_error", "L'email et le mot de passe du propriétaire doivent être fournis ensemble.")
+	}
+	if ownerPassword != "" && len(ownerPassword) < 8 {
+		return nil, apierror.New(422, "validation_error", "Le mot de passe du propriétaire doit contenir au moins 8 caractères.")
 	}
 
 	pubKey, err := randomKey("pk_live_")
@@ -100,6 +110,26 @@ func (s *Service) Create(ctx context.Context, name, slug, contactEmail, business
 	})
 	if err != nil {
 		return nil, fmt.Errorf("tenant: create: %w", err)
+	}
+
+	if ownerPassword != "" {
+		ownerHash, err := bcrypt.GenerateFromPassword([]byte(ownerPassword), bcrypt.DefaultCost)
+		if err != nil {
+			return nil, apierror.ErrInternal
+		}
+		// Separate transaction from the tenant insert above: WithTenant
+		// needs the tenant's own ID to set app.tenant_id for RLS, which
+		// only exists once the INSERT into tenants has committed.
+		err = s.pool.WithTenant(ctx, t.ID, func(ctx context.Context, tx db.TxLike) error {
+			_, err := tx.Exec(ctx, `
+				INSERT INTO users (tenant_id, email, password_hash, role)
+				VALUES ($1, $2, $3, 'owner')
+			`, t.ID, ownerEmail, string(ownerHash))
+			return err
+		})
+		if err != nil {
+			return nil, fmt.Errorf("tenant: create owner account: %w", err)
+		}
 	}
 
 	return &CreateResult{Tenant: t, APIKeySecret: secretKey}, nil

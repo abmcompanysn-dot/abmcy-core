@@ -465,26 +465,29 @@ func (s *Server) handleAdminListTenants(w http.ResponseWriter, r *http.Request) 
 
 func (s *Server) handleAdminCreateTenant(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Name         string `json:"name"`
-		Slug         string `json:"slug"`
-		ContactEmail string `json:"contact_email"`
-		BusinessType string `json:"business_type"`
+		Name          string `json:"name"`
+		Slug          string `json:"slug"`
+		ContactEmail  string `json:"contact_email"`
+		BusinessType  string `json:"business_type"`
+		OwnerEmail    string `json:"owner_email"`
+		OwnerPassword string `json:"owner_password"`
 	}
 	if err := decodeJSON(r, &body); err != nil {
 		response.Err(w, apierror.ErrValidation)
 		return
 	}
 
-	result, err := s.tenants.Create(r.Context(), body.Name, body.Slug, body.ContactEmail, body.BusinessType)
+	result, err := s.tenants.Create(r.Context(), body.Name, body.Slug, body.ContactEmail, body.BusinessType, body.OwnerEmail, body.OwnerPassword)
 	if err != nil {
 		response.Err(w, err)
 		return
 	}
 
-	// Best-effort : la clé secrète n'est JAMAIS envoyée par email (elle ne
-	// s'affiche qu'une fois dans le dashboard admin) — cet email confirme
-	// juste la création et oriente vers la connexion. Un échec d'envoi ne
-	// doit pas faire échouer la création du tenant elle-même.
+	// Best-effort : ni la clé secrète ni le mot de passe du propriétaire ne
+	// sont envoyés par email (ils ne s'affichent qu'une fois dans le
+	// dashboard admin) — cet email confirme juste la création et oriente
+	// vers la connexion. Un échec d'envoi ne doit pas faire échouer la
+	// création du tenant elle-même.
 	if body.ContactEmail != "" {
 		html := "<p>Bonjour " + result.Tenant.Name + ",</p>" +
 			"<p>Votre espace ABMCY a été créé. Connectez-vous sur <a href=\"https://dash.abmcy.com\">dash.abmcy.com</a> " +
@@ -597,6 +600,88 @@ func (s *Server) handleGetFeatures(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	response.JSON(w, http.StatusOK, flags)
+}
+
+// --- Personnel tenant (comptes individuels du dashboard) -----------------
+//
+// Protégées par requireStaffJWT : une intégration X-API-Key n'a pas
+// d'identité humaine à révoquer ou de droit à accorder à quelqu'un.
+
+func (s *Server) handleStaffLogout(w http.ResponseWriter, r *http.Request) {
+	claims, _ := staffClaimsFromContext(r.Context())
+	if claims != nil {
+		if err := s.authSvc.Logout(r.Context(), claims); err != nil {
+			response.Err(w, err)
+			return
+		}
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleListStaff(w http.ResponseWriter, r *http.Request) {
+	t, _ := authmw.TenantFromContext(r.Context())
+	staff, err := s.authSvc.ListStaffUsers(r.Context(), t.ID)
+	if err != nil {
+		response.Err(w, err)
+		return
+	}
+	response.JSON(w, http.StatusOK, staff)
+}
+
+// handleCreateStaff lets an owner add a teammate (e.g. HANI'S adding a
+// seamstress or shop manager) with their own login instead of sharing the
+// tenant's single API key.
+func (s *Server) handleCreateStaff(w http.ResponseWriter, r *http.Request) {
+	t, _ := authmw.TenantFromContext(r.Context())
+	if t.StaffRole != "owner" {
+		response.Err(w, apierror.New(403, "forbidden", "Seul le propriétaire du compte peut ajouter des membres de l'équipe."))
+		return
+	}
+
+	var body struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+		Role     string `json:"role"`
+	}
+	if err := decodeJSON(r, &body); err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+
+	staff, err := s.authSvc.CreateStaffUser(r.Context(), t.ID, body.Email, body.Password, body.Role)
+	if err != nil {
+		response.Err(w, err)
+		return
+	}
+	response.JSON(w, http.StatusCreated, staff)
+}
+
+func (s *Server) handleSetStaffActive(w http.ResponseWriter, r *http.Request) {
+	t, _ := authmw.TenantFromContext(r.Context())
+	if t.StaffRole != "owner" {
+		response.Err(w, apierror.New(403, "forbidden", "Seul le propriétaire du compte peut gérer les membres de l'équipe."))
+		return
+	}
+
+	userID, err := parseUUID(chi.URLParam(r, "userID"))
+	if err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+
+	var body struct {
+		IsActive bool `json:"is_active"`
+	}
+	if err := decodeJSON(r, &body); err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+
+	if err := s.authSvc.SetStaffUserActive(r.Context(), t.ID, userID, body.IsActive); err != nil {
+		response.Err(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // --- Super-admin (platform configuration: R2, Resend, CinetPay) ---------

@@ -114,7 +114,7 @@ func (s *Server) routes(rl *authmw.RateLimit) {
 	r.Use(s.corsMiddleware)
 
 	r.Get("/health", s.handleHealth)
-	r.Post("/auth/login", s.handleLogin)
+	r.Post("/auth/login", s.handleLogin) // personnel tenant — X-API-Key reste aussi valide sur les routes métier ci-dessous
 	r.Post("/admin/auth/login", s.handleAdminLogin)
 	r.Post("/webhooks/cinetpay/{tenantSlug}", s.handleCinetPayWebhook)
 
@@ -134,15 +134,25 @@ func (s *Server) routes(rl *authmw.RateLimit) {
 		r.Patch("/auth/customer/me", s.handleCustomerUpdateMe)
 	})
 
-	// Tenant-scoped API — requires X-API-Key, used by dash.abmcy.com clients.
+	// Tenant-scoped API — accepts EITHER X-API-Key (external integrations,
+	// e.g. a tenant's own website) OR a staff JWT (a human logged into
+	// tenant-dashboard via /auth/login). Two audiences, same routes.
 	r.Group(func(r chi.Router) {
-		r.Use(authmw.TenantAuth(s.pool))
-		r.Use(authmw.TrafficLog(s.pool)) // after TenantAuth: needs tenant context; wraps RateLimit to log rejections too
+		r.Use(s.staffAuth)
+		r.Use(authmw.TrafficLog(s.pool)) // after staffAuth: needs tenant context; wraps RateLimit to log rejections too
 		if rl != nil {
 			r.Use(rl.Middleware)
 		}
 
 		r.Get("/features", s.handleGetFeatures)
+
+		r.Group(func(r chi.Router) {
+			r.Use(s.requireStaffJWT)
+			r.Post("/auth/logout", s.handleStaffLogout)
+			r.Get("/staff", s.handleListStaff)
+			r.Post("/staff", s.handleCreateStaff)
+			r.Put("/staff/{userID}/active", s.handleSetStaffActive)
+		})
 
 		r.Post("/orders", s.handleCreateOrder)
 		r.Get("/orders", s.handleListOrders)
@@ -241,6 +251,62 @@ func (s *Server) adminAuth(next http.Handler) http.Handler {
 
 		http.Error(w, `{"error":{"code":"forbidden","message":"Accès refusé."}}`, http.StatusForbidden)
 	})
+}
+
+type staffClaimsCtxKey struct{}
+
+// staffAuth accepts either a valid staff JWT (Authorization: Bearer ...,
+// issued by POST /auth/login — a human using tenant-dashboard) or the
+// tenant's X-API-Key (an external integration, e.g. the tenant's own
+// website). Both grant the same tenant-scoped access; only the JWT path
+// additionally identifies which staff member is acting (see
+// requireStaffJWT for routes that need that, like /staff management).
+func (s *Server) staffAuth(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if auth := r.Header.Get("Authorization"); strings.HasPrefix(auth, "Bearer ") {
+			token := strings.TrimPrefix(auth, "Bearer ")
+			// A JWT always contains two dots (header.payload.signature);
+			// an API key (pk_live_...) never does — cheap way to avoid
+			// trying to JWT-parse an API key on every request.
+			if strings.Count(token, ".") == 2 {
+				if claims, err := s.authSvc.ParseToken(r.Context(), token); err == nil {
+					t, err := authmw.LookupByID(r.Context(), s.pool, claims.TenantID)
+					if err == nil && t.Active {
+						t.StaffUserID = &claims.UserID
+						t.StaffRole = claims.Role
+						ctx := context.WithValue(r.Context(), staffClaimsCtxKey{}, claims)
+						ctx = authmw.WithTenant(ctx, t)
+						next.ServeHTTP(w, r.WithContext(ctx))
+						return
+					}
+				}
+				response.Err(w, apierror.ErrUnauthorized)
+				return
+			}
+		}
+
+		authmw.TenantAuth(s.pool)(next).ServeHTTP(w, r)
+	})
+}
+
+// requireStaffJWT rejects requests authenticated only by X-API-Key —
+// for routes where "which human is doing this" must be known (logout,
+// team management), an API key integration has no such identity to give.
+func (s *Server) requireStaffJWT(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t, _ := authmw.TenantFromContext(r.Context())
+		if t.StaffUserID == nil {
+			response.Err(w, apierror.New(403, "staff_login_required",
+				"Cette action nécessite une connexion via le dashboard (email/mot de passe), pas une clé API."))
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func staffClaimsFromContext(ctx context.Context) (*auth.Claims, bool) {
+	c, ok := ctx.Value(staffClaimsCtxKey{}).(*auth.Claims)
+	return c, ok
 }
 
 type customerCtxKey struct{}
