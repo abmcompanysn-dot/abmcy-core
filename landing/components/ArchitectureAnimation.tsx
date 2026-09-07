@@ -1,13 +1,23 @@
 "use client";
 
 import { motion } from "framer-motion";
+import {
+  Wrench,
+  Store,
+  Cog,
+  Database,
+  Image as ImageIcon,
+  Mail,
+  CreditCard,
+  type LucideIcon,
+} from "lucide-react";
 import { useInView } from "@/lib/use-in-view";
 
 type BlockDef = {
   id: string;
   label: string;
   sublabel: string;
-  icon: string;
+  icon: LucideIcon;
   col: string;
   row: string;
   accent: string;
@@ -21,7 +31,7 @@ const BLOCKS: BlockDef[] = [
     id: "admin",
     label: "Dashboard Admin",
     sublabel: "ad.abmcy.com",
-    icon: "🛠️",
+    icon: Wrench,
     col: "col-start-2",
     row: "row-start-1",
     accent: "border-slate-300 bg-white",
@@ -30,52 +40,52 @@ const BLOCKS: BlockDef[] = [
     id: "tenant",
     label: "Dashboard Tenant",
     sublabel: "dash.abmcy.com (HANI'S...)",
-    icon: "🏬",
+    icon: Store,
     col: "col-start-4",
     row: "row-start-1",
     accent: "border-slate-300 bg-white",
   },
   {
     id: "api",
-    label: "Backend Go",
-    sublabel: "API modulith · api.abmcy.com",
-    icon: "⚙️",
+    label: "Moteur central",
+    sublabel: "API sécurisée · api.abmcy.com",
+    icon: Cog,
     col: "col-start-3",
     row: "row-start-2",
     accent: "border-indigo-300 bg-indigo-50",
   },
   {
     id: "postgres",
-    label: "Postgres",
-    sublabel: "Multi-tenant · Row Level Security",
-    icon: "🗄️",
+    label: "Base de données sécurisée",
+    sublabel: "Isolation stricte par client",
+    icon: Database,
     col: "col-start-1",
     row: "row-start-3",
     accent: "border-sky-300 bg-sky-50",
   },
   {
     id: "imgbb",
-    label: "imgbb",
-    sublabel: "Stockage des photos produits",
-    icon: "🖼️",
+    label: "Stockage cloud",
+    sublabel: "Photos produits & réalisations",
+    icon: ImageIcon,
     col: "col-start-2",
     row: "row-start-3",
     accent: "border-emerald-300 bg-emerald-50",
   },
   {
     id: "resend",
-    label: "Resend",
-    sublabel: "Emails · 100/jour par tenant",
-    icon: "✉️",
+    label: "Moteur de notifications",
+    sublabel: "Emails automatiques aux clients",
+    icon: Mail,
     col: "col-start-4",
     row: "row-start-3",
     accent: "border-amber-300 bg-amber-50",
   },
   {
     id: "cinetpay",
-    label: "CinetPay",
-    sublabel: "Wave · Orange Money · MTN MoMo · Cartes",
-    icon: "💳",
+    label: "Passerelle de paiement",
+    sublabel: "Mobile money & cartes bancaires",
+    icon: CreditCard,
     col: "col-start-5",
     row: "row-start-3",
     accent: "border-rose-300 bg-rose-50",
@@ -174,6 +184,7 @@ function ConnectionLine({
 }
 
 function Block({ block, delay, active }: { block: BlockDef; delay: number; active: boolean }) {
+  const Icon = block.icon;
   return (
     <motion.div
       className={`${block.col} ${block.row} relative z-10 flex flex-col items-center justify-center gap-1 rounded-2xl border px-3 py-4 text-center shadow-sm ${block.accent}`}
@@ -181,9 +192,7 @@ function Block({ block, delay, active }: { block: BlockDef; delay: number; activ
       animate={active ? { opacity: 1, y: 0, scale: 1 } : {}}
       transition={{ duration: 0.55, delay, ease: [0.22, 1, 0.36, 1] }}
     >
-      <span className="text-2xl" aria-hidden>
-        {block.icon}
-      </span>
+      <Icon className="h-6 w-6 text-slate-700" strokeWidth={1.75} aria-hidden />
       <span className="text-sm font-semibold text-slate-900">{block.label}</span>
       <span className="text-[11px] leading-tight text-slate-500">{block.sublabel}</span>
     </motion.div>
