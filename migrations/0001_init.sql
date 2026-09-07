@@ -20,6 +20,8 @@ CREATE TABLE tenants (
     email_quota_per_day  INT NOT NULL DEFAULT 100,
     email_sent_today     INT NOT NULL DEFAULT 0,
     email_quota_reset_at DATE NOT NULL DEFAULT CURRENT_DATE,
+    rate_limit_per_sec   INT NOT NULL DEFAULT 5,   -- requêtes/s soutenues autorisées
+    rate_limit_burst     INT NOT NULL DEFAULT 20,  -- pic instantané toléré
     is_active            BOOLEAN NOT NULL DEFAULT TRUE,
     created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at           TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -147,6 +149,45 @@ CREATE POLICY tenant_isolation_email_logs ON email_logs
     USING (tenant_id = current_setting('app.tenant_id', true)::uuid);
 
 CREATE INDEX idx_email_logs_tenant_date ON email_logs(tenant_id, created_at);
+
+-- ============================================================
+-- PLATFORM CONFIG (clés de service globales à ABMCY : R2, Resend, CinetPay,
+-- ADMIN_API_KEY — saisies/modifiées depuis le dashboard super-admin plutôt
+-- que figées dans des fichiers .env sur le serveur. Table système, pas de
+-- RLS : accessible uniquement via WithSystem, jamais scopée à un tenant).
+-- Les valeurs sont chiffrées côté application (AES-GCM) avant d'être
+-- écrites ici — cette table ne contient jamais de secret en clair, même en
+-- cas de fuite du dump SQL. La clé de chiffrement elle-même reste dans
+-- l'environnement (CONFIG_ENCRYPTION_KEY), c'est la seule qui doit rester
+-- un vrai secret serveur — voir internal/platformconfig/.
+-- ============================================================
+CREATE TABLE platform_config (
+    key           VARCHAR(100) PRIMARY KEY, -- ex: "R2_ACCESS_KEY_ID"
+    value_encrypted BYTEA NOT NULL,
+    updated_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_by    UUID REFERENCES users(id) ON DELETE SET NULL
+);
+
+-- ============================================================
+-- REQUEST LOGS (traçabilité légère du trafic par tenant, pour la vue
+-- "trafic" du dashboard super-admin : volumétrie, erreurs, endpoints les
+-- plus utilisés. Pas de RLS car consultée uniquement par le super-admin
+-- via WithSystem ; purge/rétention à gérer par un job périodique — voir
+-- k8s/README.md pour l'ajout futur d'un CronJob de nettoyage).
+-- ============================================================
+CREATE TABLE request_logs (
+    id           BIGSERIAL PRIMARY KEY,
+    tenant_id    UUID REFERENCES tenants(id) ON DELETE CASCADE,
+    method       VARCHAR(10) NOT NULL,
+    path         VARCHAR(255) NOT NULL,
+    status_code  INT NOT NULL,
+    duration_ms  INT NOT NULL,
+    rate_limited BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_request_logs_tenant_date ON request_logs(tenant_id, created_at);
+CREATE INDEX idx_request_logs_date ON request_logs(created_at);
 
 -- ============================================================
 -- Rôle applicatif : la connexion pool utilise ce rôle, jamais le

@@ -2,28 +2,49 @@ package notification
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/abmcy/core/internal/db"
+	"github.com/abmcy/core/internal/platformconfig"
 	"github.com/abmcy/core/pkg/apierror"
 	"github.com/google/uuid"
 )
 
 type Service struct {
 	pool   *db.Pool
-	resend *ResendClient
+	config *platformconfig.Service
 }
 
-func NewService(pool *db.Pool, resend *ResendClient) *Service {
-	return &Service{pool: pool, resend: resend}
+func NewService(pool *db.Pool, config *platformconfig.Service) *Service {
+	return &Service{pool: pool, config: config}
+}
+
+// resendClient builds a Resend client from whatever is currently
+// configured in platform_config — live, no restart needed after a
+// dashboard update.
+func (s *Service) resendClient() (*ResendClient, error) {
+	apiKey, _ := s.config.Get(platformconfig.KeyResendAPIKey)
+	fromAddr, _ := s.config.Get(platformconfig.KeyResendFromAddr)
+	client, err := NewResendClient(apiKey, fromAddr)
+	if errors.Is(err, ErrNotConfigured) {
+		return nil, apierror.New(503, "email_not_configured",
+			"L'envoi d'emails n'est pas encore configuré. Configurez Resend depuis le dashboard admin.")
+	}
+	return client, err
 }
 
 // SendEmail enforces each tenant's 100-email/day quota (email_quota_per_day
 // in the tenants table) before calling Resend. The daily counter resets
 // automatically when email_quota_reset_at is no longer today.
 func (s *Service) SendEmail(ctx context.Context, tenantID uuid.UUID, to, subject, html, template string) error {
+	resend, err := s.resendClient()
+	if err != nil {
+		return err
+	}
+
 	var allowed bool
-	err := s.pool.WithTenant(ctx, tenantID, func(ctx context.Context, tx db.TxLike) error {
+	err = s.pool.WithTenant(ctx, tenantID, func(ctx context.Context, tx db.TxLike) error {
 		// Reset the daily counter if we've rolled over to a new day.
 		if _, err := tx.Exec(ctx, `
 			UPDATE tenants
@@ -48,7 +69,7 @@ func (s *Service) SendEmail(ctx context.Context, tenantID uuid.UUID, to, subject
 		return apierror.ErrEmailQuota
 	}
 
-	resendID, sendErr := s.resend.Send(ctx, to, subject, html)
+	resendID, sendErr := resend.Send(ctx, to, subject, html)
 	status := "sent"
 	if sendErr != nil {
 		status = "failed"

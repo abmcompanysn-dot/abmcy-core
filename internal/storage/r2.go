@@ -31,9 +31,14 @@ type R2Config struct {
 	PublicURL       string
 }
 
+// ErrNotConfigured is returned whenever R2 credentials haven't been set
+// yet from the super-admin dashboard (Configuration page). Callers map it
+// to a 503 rather than treating it as an unexpected failure.
+var ErrNotConfigured = fmt.Errorf("r2: not configured")
+
 func NewR2Client(cfg R2Config) (*R2Client, error) {
 	if cfg.AccountID == "" || cfg.AccessKeyID == "" || cfg.SecretAccessKey == "" || cfg.Bucket == "" || cfg.PublicURL == "" {
-		return nil, fmt.Errorf("r2: incomplete configuration")
+		return nil, ErrNotConfigured
 	}
 
 	endpoint := fmt.Sprintf("https://%s.r2.cloudflarestorage.com", cfg.AccountID)

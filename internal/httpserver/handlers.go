@@ -7,9 +7,11 @@ import (
 
 	authmw "github.com/abmcy/core/internal/middleware"
 	"github.com/abmcy/core/internal/order"
+	"github.com/abmcy/core/internal/platformconfig"
 	"github.com/abmcy/core/pkg/apierror"
 	"github.com/abmcy/core/pkg/response"
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 )
 
 func decodeJSON(r *http.Request, dst any) error {
@@ -232,6 +234,94 @@ func (s *Server) handleAdminCreateTenant(w http.ResponseWriter, r *http.Request)
 		"tenant":         result.Tenant,
 		"api_key_secret": result.APIKeySecret, // shown once — client must store it now
 	})
+}
+
+func (s *Server) handleAdminUpdateRateLimit(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := parseUUID(chi.URLParam(r, "tenantID"))
+	if err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+
+	var body struct {
+		RateLimitPerSec int `json:"rate_limit_per_sec"`
+		RateLimitBurst  int `json:"rate_limit_burst"`
+	}
+	if err := decodeJSON(r, &body); err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+
+	if err := s.tenants.UpdateRateLimit(r.Context(), tenantID, body.RateLimitPerSec, body.RateLimitBurst); err != nil {
+		response.Err(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// --- Super-admin (platform configuration: R2, Resend, CinetPay) ---------
+
+func (s *Server) handleAdminGetConfig(w http.ResponseWriter, r *http.Request) {
+	response.JSON(w, http.StatusOK, s.config.StatusAll())
+}
+
+func (s *Server) handleAdminSetConfig(w http.ResponseWriter, r *http.Request) {
+	key := platformconfig.Key(chi.URLParam(r, "key"))
+
+	valid := false
+	for _, k := range platformconfig.AllKeys {
+		if k == key {
+			valid = true
+			break
+		}
+	}
+	if !valid {
+		response.Err(w, apierror.New(404, "unknown_config_key", "Clé de configuration inconnue."))
+		return
+	}
+
+	var body struct {
+		Value string `json:"value"`
+	}
+	if err := decodeJSON(r, &body); err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+
+	// updatedBy is left as the zero UUID until admin dashboard accounts
+	// exist (see internal/auth) — platform_config.updated_by is nullable
+	// and this is filled in properly once admin users are real rows.
+	if err := s.config.Set(r.Context(), key, body.Value, uuid.Nil); err != nil {
+		response.Err(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// --- Super-admin (traffic) -----------------------------------------------
+
+func (s *Server) handleAdminTrafficSummary(w http.ResponseWriter, r *http.Request) {
+	summary, err := s.traffic.SummaryLast24h(r.Context())
+	if err != nil {
+		response.Err(w, err)
+		return
+	}
+	response.JSON(w, http.StatusOK, summary)
+}
+
+func (s *Server) handleAdminTrafficDetail(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := parseUUID(chi.URLParam(r, "tenantID"))
+	if err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+
+	recent, err := s.traffic.RecentForTenant(r.Context(), tenantID, 100)
+	if err != nil {
+		response.Err(w, err)
+		return
+	}
+	response.JSON(w, http.StatusOK, recent)
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {

@@ -16,12 +16,19 @@ type ResendClient struct {
 	httpClient *http.Client
 }
 
-func NewResendClient(apiKey, fromAddr string) *ResendClient {
+// ErrNotConfigured is returned whenever the Resend API key hasn't been
+// set yet from the super-admin dashboard (Configuration page).
+var ErrNotConfigured = fmt.Errorf("resend: not configured")
+
+func NewResendClient(apiKey, fromAddr string) (*ResendClient, error) {
+	if apiKey == "" || fromAddr == "" {
+		return nil, ErrNotConfigured
+	}
 	return &ResendClient{
 		apiKey:     apiKey,
 		fromAddr:   fromAddr,
 		httpClient: &http.Client{Timeout: 15 * time.Second},
-	}
+	}, nil
 }
 
 type sendRequest struct {

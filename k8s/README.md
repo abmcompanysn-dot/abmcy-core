@@ -109,14 +109,17 @@ contient que des placeholders et n'est pas déployé par `kustomization.yaml`.
 
 Le fichier `.env` (déjà présent à la racine du repo, non commité) contient
 les clés suivantes : `APP_ENV`, `PORT`, `DATABASE_URL`, `POSTGRES_PASSWORD`,
-`JWT_SECRET`, `ADMIN_API_KEY`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`,
-`R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_PUBLIC_URL`, `RESEND_API_KEY`,
-`RESEND_FROM_ADDR`, `CINETPAY_API_KEY`, `CINETPAY_SITE_ID`, `CORS_ORIGINS`.
+`JWT_SECRET`, `CONFIG_ENCRYPTION_KEY`, `ADMIN_API_KEY`, `CORS_ORIGINS`.
 
-Le Secret Kubernetes `abmcy-secrets` n'a besoin que des clés réellement
-consommées par `k8s/api-deployment.yaml` et `k8s/postgres-statefulset.yaml`
-(`APP_ENV`, `PORT` et `CORS_ORIGINS` sont déjà fixés en dur dans le
-Deployment, pas besoin de les mettre dans le Secret).
+Depuis la migration vers `internal/platformconfig`, les clés de service
+(Cloudflare R2, Resend, CinetPay) ne sont **plus** des variables d'env — elles
+se configurent depuis le dashboard admin (page Configuration) une fois l'API
+démarrée, et sont stockées chiffrées en base (table `platform_config`,
+chiffrées avec `CONFIG_ENCRYPTION_KEY`). Le Secret Kubernetes `abmcy-secrets`
+n'a donc besoin que des clés réellement consommées par
+`k8s/api-deployment.yaml` et `k8s/postgres-statefulset.yaml` (`APP_ENV`,
+`PORT` et `CORS_ORIGINS` sont déjà fixés en dur dans le Deployment, pas
+besoin de les mettre dans le Secret).
 
 Méthode recommandée — créer le Secret directement depuis `.env` :
 
@@ -128,15 +131,7 @@ kubectl create secret generic abmcy-secrets \
   --from-literal=POSTGRES_PASSWORD="$(grep '^POSTGRES_PASSWORD=' .env | cut -d= -f2-)" \
   --from-literal=DATABASE_URL="$(grep '^DATABASE_URL=' .env | cut -d= -f2-)" \
   --from-literal=JWT_SECRET="$(grep '^JWT_SECRET=' .env | cut -d= -f2-)" \
-  --from-literal=R2_ACCOUNT_ID="$(grep '^R2_ACCOUNT_ID=' .env | cut -d= -f2-)" \
-  --from-literal=R2_ACCESS_KEY_ID="$(grep '^R2_ACCESS_KEY_ID=' .env | cut -d= -f2-)" \
-  --from-literal=R2_SECRET_ACCESS_KEY="$(grep '^R2_SECRET_ACCESS_KEY=' .env | cut -d= -f2-)" \
-  --from-literal=R2_BUCKET="$(grep '^R2_BUCKET=' .env | cut -d= -f2-)" \
-  --from-literal=R2_PUBLIC_URL="$(grep '^R2_PUBLIC_URL=' .env | cut -d= -f2-)" \
-  --from-literal=RESEND_API_KEY="$(grep '^RESEND_API_KEY=' .env | cut -d= -f2-)" \
-  --from-literal=RESEND_FROM_ADDR="$(grep '^RESEND_FROM_ADDR=' .env | cut -d= -f2-)" \
-  --from-literal=CINETPAY_API_KEY="$(grep '^CINETPAY_API_KEY=' .env | cut -d= -f2-)" \
-  --from-literal=CINETPAY_SITE_ID="$(grep '^CINETPAY_SITE_ID=' .env | cut -d= -f2-)" \
+  --from-literal=CONFIG_ENCRYPTION_KEY="$(grep '^CONFIG_ENCRYPTION_KEY=' .env | cut -d= -f2-)" \
   --from-literal=ADMIN_API_KEY="$(grep '^ADMIN_API_KEY=' .env | cut -d= -f2-)"
 ```
 
@@ -147,6 +142,11 @@ kubectl create secret generic abmcy-secrets \
 Alternative : copier `k8s/secrets-example.yaml` vers un fichier non commité
 (ex: `k8s/secrets.local.yaml`, à ajouter dans `.gitignore`), y mettre les
 vraies valeurs, puis `kubectl apply -f k8s/secrets.local.yaml`.
+
+Une fois l'API démarrée et joignable, configurez R2/Resend/CinetPay depuis
+le dashboard admin (`ad.abmcy.com` → Configuration) — aucune commande
+`kubectl` supplémentaire n'est nécessaire pour ces clés-là, et les modifier
+plus tard ne demande ni redéploiement ni redémarrage du pod.
 
 ## 5. Déployer
 

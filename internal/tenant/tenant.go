@@ -21,6 +21,8 @@ type Tenant struct {
 	StorageLimitBytes int64     `json:"storage_limit_bytes"`
 	StorageUsedBytes  int64     `json:"storage_used_bytes"`
 	EmailQuotaPerDay  int       `json:"email_quota_per_day"`
+	RateLimitPerSec   int       `json:"rate_limit_per_sec"`
+	RateLimitBurst    int       `json:"rate_limit_burst"`
 	IsActive          bool      `json:"is_active"`
 }
 
@@ -61,10 +63,10 @@ func (s *Service) Create(ctx context.Context, name, slug string) (*CreateResult,
 		row := tx.QueryRow(ctx, `
 			INSERT INTO tenants (name, slug, api_key_public, api_key_secret_hash)
 			VALUES ($1, $2, $3, $4)
-			RETURNING id, name, slug, api_key_public, plan, storage_limit_bytes, storage_used_bytes, email_quota_per_day, is_active
+			RETURNING id, name, slug, api_key_public, plan, storage_limit_bytes, storage_used_bytes, email_quota_per_day, rate_limit_per_sec, rate_limit_burst, is_active
 		`, name, slug, pubKey, string(secretHash))
 		return row.Scan(&t.ID, &t.Name, &t.Slug, &t.APIKeyPublic, &t.Plan,
-			&t.StorageLimitBytes, &t.StorageUsedBytes, &t.EmailQuotaPerDay, &t.IsActive)
+			&t.StorageLimitBytes, &t.StorageUsedBytes, &t.EmailQuotaPerDay, &t.RateLimitPerSec, &t.RateLimitBurst, &t.IsActive)
 	})
 	if err != nil {
 		return nil, fmt.Errorf("tenant: create: %w", err)
@@ -79,7 +81,7 @@ func (s *Service) ListAll(ctx context.Context) ([]Tenant, error) {
 	var tenants []Tenant
 	err := s.pool.WithSystem(ctx, func(ctx context.Context, tx db.TxLike) error {
 		rows, err := tx.Query(ctx, `
-			SELECT id, name, slug, api_key_public, plan, storage_limit_bytes, storage_used_bytes, email_quota_per_day, is_active
+			SELECT id, name, slug, api_key_public, plan, storage_limit_bytes, storage_used_bytes, email_quota_per_day, rate_limit_per_sec, rate_limit_burst, is_active
 			FROM tenants ORDER BY created_at DESC
 		`)
 		if err != nil {
@@ -89,7 +91,7 @@ func (s *Service) ListAll(ctx context.Context) ([]Tenant, error) {
 		for rows.Next() {
 			var t Tenant
 			if err := rows.Scan(&t.ID, &t.Name, &t.Slug, &t.APIKeyPublic, &t.Plan,
-				&t.StorageLimitBytes, &t.StorageUsedBytes, &t.EmailQuotaPerDay, &t.IsActive); err != nil {
+				&t.StorageLimitBytes, &t.StorageUsedBytes, &t.EmailQuotaPerDay, &t.RateLimitPerSec, &t.RateLimitBurst, &t.IsActive); err != nil {
 				return err
 			}
 			tenants = append(tenants, t)
@@ -104,6 +106,20 @@ func (s *Service) ListAll(ctx context.Context) ([]Tenant, error) {
 func (s *Service) UpdateQuota(ctx context.Context, tenantID uuid.UUID, limitBytes int64) error {
 	return s.pool.WithSystem(ctx, func(ctx context.Context, tx db.TxLike) error {
 		_, err := tx.Exec(ctx, `UPDATE tenants SET storage_limit_bytes = $1, updated_at = now() WHERE id = $2`, limitBytes, tenantID)
+		return err
+	})
+}
+
+// UpdateRateLimit lets the super-admin adjust a tenant's request-rate
+// allowance (requests/sec sustained + burst) — e.g. to grant a paying
+// tenant more headroom than the free-plan default.
+func (s *Service) UpdateRateLimit(ctx context.Context, tenantID uuid.UUID, perSec, burst int) error {
+	if perSec <= 0 || burst <= 0 {
+		return apierror.ErrValidation
+	}
+	return s.pool.WithSystem(ctx, func(ctx context.Context, tx db.TxLike) error {
+		_, err := tx.Exec(ctx, `UPDATE tenants SET rate_limit_per_sec = $1, rate_limit_burst = $2, updated_at = now() WHERE id = $3`,
+			perSec, burst, tenantID)
 		return err
 	})
 }

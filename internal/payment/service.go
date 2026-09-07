@@ -2,30 +2,52 @@ package payment
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/abmcy/core/internal/db"
 	"github.com/abmcy/core/internal/order"
+	"github.com/abmcy/core/internal/platformconfig"
+	"github.com/abmcy/core/pkg/apierror"
 	"github.com/google/uuid"
 )
 
 type Service struct {
-	pool     *db.Pool
-	cinetpay *CinetPayClient
-	orders   *order.Service
+	pool   *db.Pool
+	config *platformconfig.Service
+	orders *order.Service
 }
 
-func NewService(pool *db.Pool, cinetpay *CinetPayClient, orders *order.Service) *Service {
-	return &Service{pool: pool, cinetpay: cinetpay, orders: orders}
+func NewService(pool *db.Pool, config *platformconfig.Service, orders *order.Service) *Service {
+	return &Service{pool: pool, config: config, orders: orders}
+}
+
+// cinetpayClient builds a CinetPay client from whatever is currently
+// configured in platform_config — live, no restart needed after a
+// dashboard update.
+func (s *Service) cinetpayClient() (*CinetPayClient, error) {
+	apiKey, _ := s.config.Get(platformconfig.KeyCinetPayAPIKey)
+	siteID, _ := s.config.Get(platformconfig.KeyCinetPaySiteID)
+	client, err := NewCinetPayClient(apiKey, siteID)
+	if errors.Is(err, ErrNotConfigured) {
+		return nil, apierror.New(503, "payment_not_configured",
+			"Les paiements ne sont pas encore configurés. Configurez CinetPay depuis le dashboard admin.")
+	}
+	return client, err
 }
 
 // InitiateForOrder starts a CinetPay checkout for an existing order and
 // records a "initiated" row in payments so the webhook has something to
 // reconcile against.
 func (s *Service) InitiateForOrder(ctx context.Context, tenantID, orderID uuid.UUID, amount int, customerName, customerPhone, returnURL, notifyURL string) (*InitPaymentResult, error) {
+	cinetpay, err := s.cinetpayClient()
+	if err != nil {
+		return nil, err
+	}
+
 	txRef := "TXN-" + orderID.String()[:8] + "-" + uuid.NewString()[:8]
 
-	result, err := s.cinetpay.InitPayment(ctx, InitPaymentInput{
+	result, err := cinetpay.InitPayment(ctx, InitPaymentInput{
 		TransactionID: txRef,
 		Amount:        amount,
 		Currency:      "XOF",
@@ -57,7 +79,12 @@ func (s *Service) InitiateForOrder(ctx context.Context, tenantID, orderID uuid.U
 // the transaction status directly with CinetPay (never trusts the
 // webhook body alone) before marking the payment/order as paid.
 func (s *Service) HandleWebhook(ctx context.Context, tenantID uuid.UUID, transactionRef string) error {
-	status, err := s.cinetpay.VerifyTransaction(ctx, transactionRef)
+	cinetpay, err := s.cinetpayClient()
+	if err != nil {
+		return err
+	}
+
+	status, err := cinetpay.VerifyTransaction(ctx, transactionRef)
 	if err != nil {
 		return fmt.Errorf("payment: verify: %w", err)
 	}

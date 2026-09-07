@@ -18,12 +18,19 @@ type CinetPayClient struct {
 	httpClient *http.Client
 }
 
-func NewCinetPayClient(apiKey, siteID string) *CinetPayClient {
+// ErrNotConfigured is returned whenever CinetPay credentials haven't been
+// set yet from the super-admin dashboard (Configuration page).
+var ErrNotConfigured = fmt.Errorf("cinetpay: not configured")
+
+func NewCinetPayClient(apiKey, siteID string) (*CinetPayClient, error) {
+	if apiKey == "" || siteID == "" {
+		return nil, ErrNotConfigured
+	}
 	return &CinetPayClient{
 		apiKey:     apiKey,
 		siteID:     siteID,
 		httpClient: &http.Client{Timeout: 20 * time.Second},
-	}
+	}, nil
 }
 
 type InitPaymentInput struct {

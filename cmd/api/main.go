@@ -1,9 +1,15 @@
 // Command api boots the ABMCY Core Multi-Tenant backend: a single Go
 // binary (modulith) exposing every service — tenants, auth, catalog,
-// orders, storage (Cloudflare R2), payments (CinetPay), notifications (Resend)
-// — behind one HTTP router. Deployed on the VPS behind api.abmcy.com;
-// the frontend dashboards (dash.abmcy.com, ad.abmcy.com) live separately
-// on Vercel and talk to this API over HTTPS.
+// orders, storage (Cloudflare R2), payments (CinetPay), notifications
+// (Resend) — behind one HTTP router. Deployed on the VPS behind
+// api.abmcy.com; the frontend dashboards (dash.abmcy.com, ad.abmcy.com)
+// live separately on Vercel and talk to this API over HTTPS.
+//
+// Service credentials (R2, Resend, CinetPay) are NOT required at startup:
+// they're managed at runtime via internal/platformconfig and set from the
+// super-admin dashboard's Configuration page. A fresh deploy boots with
+// none of them configured; the features that need them answer a clear
+// 503 until an operator fills them in — see internal/platformconfig.
 package main
 
 import (
@@ -18,13 +24,15 @@ import (
 	"github.com/abmcy/core/internal/auth"
 	"github.com/abmcy/core/internal/config"
 	"github.com/abmcy/core/internal/db"
-	authmw "github.com/abmcy/core/internal/middleware"
 	"github.com/abmcy/core/internal/httpserver"
+	authmw "github.com/abmcy/core/internal/middleware"
 	"github.com/abmcy/core/internal/notification"
 	"github.com/abmcy/core/internal/order"
 	"github.com/abmcy/core/internal/payment"
+	"github.com/abmcy/core/internal/platformconfig"
 	"github.com/abmcy/core/internal/storage"
 	"github.com/abmcy/core/internal/tenant"
+	"github.com/abmcy/core/internal/traffic"
 )
 
 func main() {
@@ -47,36 +55,26 @@ func main() {
 	}
 	defer pool.Close()
 
+	platformCfg, err := platformconfig.NewService(pool, cfg.ConfigEncryptionKey)
+	if err != nil {
+		slog.Error("platformconfig: init failed", "error", err)
+		os.Exit(1)
+	}
+	if err := platformCfg.Load(ctx); err != nil {
+		slog.Error("platformconfig: initial load failed", "error", err)
+		os.Exit(1)
+	}
+
 	// Wire services.
 	tenants := tenant.NewService(pool)
 	authSvc := auth.NewService(pool, cfg.JWTSecret)
 	orders := order.NewService(pool)
+	storageSvc := storage.NewService(pool, platformCfg)
+	payments := payment.NewService(pool, platformCfg, orders)
+	notifications := notification.NewService(pool, platformCfg)
+	trafficSvc := traffic.NewService(pool)
 
-	r2, err := storage.NewR2Client(storage.R2Config{
-		AccountID:       cfg.R2AccountID,
-		AccessKeyID:     cfg.R2AccessKeyID,
-		SecretAccessKey: cfg.R2SecretAccessKey,
-		Bucket:          cfg.R2Bucket,
-		PublicURL:       cfg.R2PublicURL,
-	})
-	if err != nil {
-		slog.Error("storage: r2 client init failed", "error", err)
-		os.Exit(1)
-	}
-	storageSvc := storage.NewService(pool, r2)
-
-	cinetpay := payment.NewCinetPayClient(cfg.CinetPayAPIKey, cfg.CinetPaySiteID)
-	payments := payment.NewService(pool, cinetpay, orders)
-
-	resend := notification.NewResendClient(cfg.ResendAPIKey, cfg.ResendFromAddr)
-	notifications := notification.NewService(pool, resend)
-
-	rateLimiter := authmw.NewRateLimit(5, 20) // 5 req/s soutenu, burst 20, par tenant
-
-	adminKey := os.Getenv("ADMIN_API_KEY")
-	if adminKey == "" {
-		slog.Warn("ADMIN_API_KEY not set — /admin/* routes are unreachable until it is configured")
-	}
+	rateLimiter := authmw.NewRateLimit(5, 20) // repli par défaut si un tenant n'a pas ses propres limites
 
 	srv := httpserver.New(httpserver.Deps{
 		Pool:          pool,
@@ -86,10 +84,12 @@ func main() {
 		Storage:       storageSvc,
 		Payments:      payments,
 		Notifications: notifications,
+		Config:        platformCfg,
+		Traffic:       trafficSvc,
 		RateLimiter:   rateLimiter,
 		PublicBaseURL: "https://api.abmcy.com",
 		CorsOrigins:   cfg.CorsOrigins,
-		AdminAPIKey:   adminKey,
+		AdminAPIKey:   cfg.AdminAPIKey,
 	})
 
 	httpSrv := &http.Server{

@@ -11,8 +11,10 @@ import (
 	"github.com/abmcy/core/internal/notification"
 	"github.com/abmcy/core/internal/order"
 	"github.com/abmcy/core/internal/payment"
+	"github.com/abmcy/core/internal/platformconfig"
 	"github.com/abmcy/core/internal/storage"
 	"github.com/abmcy/core/internal/tenant"
+	"github.com/abmcy/core/internal/traffic"
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
 	"github.com/google/uuid"
@@ -28,6 +30,8 @@ type Server struct {
 	storage       *storage.Service
 	payments      *payment.Service
 	notifications *notification.Service
+	config        *platformconfig.Service
+	traffic       *traffic.Service
 
 	publicBaseURL string
 	corsOrigins   []string
@@ -42,6 +46,8 @@ type Deps struct {
 	Storage       *storage.Service
 	Payments      *payment.Service
 	Notifications *notification.Service
+	Config        *platformconfig.Service
+	Traffic       *traffic.Service
 	RateLimiter   *authmw.RateLimit
 	PublicBaseURL string
 	CorsOrigins   string
@@ -58,6 +64,8 @@ func New(d Deps) *Server {
 		storage:       d.Storage,
 		payments:      d.Payments,
 		notifications: d.Notifications,
+		config:        d.Config,
+		traffic:       d.Traffic,
 		publicBaseURL: d.PublicBaseURL,
 		corsOrigins:   strings.Split(d.CorsOrigins, ","),
 		adminAPIKey:   d.AdminAPIKey,
@@ -83,6 +91,7 @@ func (s *Server) routes(rl *authmw.RateLimit) {
 	// Tenant-scoped API — requires X-API-Key, used by dash.abmcy.com clients.
 	r.Group(func(r chi.Router) {
 		r.Use(authmw.TenantAuth(s.pool))
+		r.Use(authmw.TrafficLog(s.pool)) // after TenantAuth: needs tenant context; wraps RateLimit to log rejections too
 		if rl != nil {
 			r.Use(rl.Middleware)
 		}
@@ -94,12 +103,19 @@ func (s *Server) routes(rl *authmw.RateLimit) {
 		r.Post("/notifications/email", s.handleSendEmail)
 	})
 
-	// Super-admin API — separate static key, used only by cors.abmcy.com's
+	// Super-admin API — separate static key, used only by ad.abmcy.com's
 	// own admin dashboard, never exposed to tenants.
 	r.Group(func(r chi.Router) {
 		r.Use(s.adminAuth)
 		r.Get("/admin/tenants", s.handleAdminListTenants)
 		r.Post("/admin/tenants", s.handleAdminCreateTenant)
+		r.Put("/admin/tenants/{tenantID}/rate-limit", s.handleAdminUpdateRateLimit)
+
+		r.Get("/admin/config", s.handleAdminGetConfig)
+		r.Put("/admin/config/{key}", s.handleAdminSetConfig)
+
+		r.Get("/admin/traffic", s.handleAdminTrafficSummary)
+		r.Get("/admin/traffic/{tenantID}", s.handleAdminTrafficDetail)
 	})
 }
 
@@ -136,8 +152,8 @@ func (s *Server) corsMiddleware(next http.Handler) http.Handler {
 func (s *Server) lookupTenantBySlug(ctx context.Context, slug string) (authmw.Tenant, error) {
 	var t authmw.Tenant
 	err := s.pool.WithSystem(ctx, func(ctx context.Context, tx db.TxLike) error {
-		row := tx.QueryRow(ctx, `SELECT id, slug, plan, is_active FROM tenants WHERE slug = $1`, slug)
-		return row.Scan(&t.ID, &t.Slug, &t.Plan, &t.Active)
+		row := tx.QueryRow(ctx, `SELECT id, slug, plan, is_active, rate_limit_per_sec, rate_limit_burst FROM tenants WHERE slug = $1`, slug)
+		return row.Scan(&t.ID, &t.Slug, &t.Plan, &t.Active, &t.RateLimitPerSec, &t.RateLimitBurst)
 	})
 	return t, err
 }
