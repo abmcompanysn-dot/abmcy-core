@@ -12,12 +12,34 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+// BusinessType hints at which shape of products.attributes the dashboard
+// suggests by default for a tenant (sizes/colors for a tailor, a download
+// link for a digital product, ...). It never restricts what a tenant can
+// actually store — see internal/catalog/products.go.
+type BusinessType string
+
+const (
+	BusinessCouture BusinessType = "couture_sur_mesure"
+	BusinessGeneral BusinessType = "commerce_general"
+	BusinessDigital BusinessType = "produit_numerique"
+	BusinessOther   BusinessType = "general"
+)
+
+func ValidBusinessType(bt string) bool {
+	switch BusinessType(bt) {
+	case BusinessCouture, BusinessGeneral, BusinessDigital, BusinessOther:
+		return true
+	}
+	return false
+}
+
 type Tenant struct {
 	ID                uuid.UUID `json:"id"`
 	Name              string    `json:"name"`
 	Slug              string    `json:"slug"`
 	APIKeyPublic      string    `json:"api_key_public"`
 	Plan              string    `json:"plan"`
+	BusinessType      string    `json:"business_type"`
 	StorageLimitBytes int64     `json:"storage_limit_bytes"`
 	StorageUsedBytes  int64     `json:"storage_used_bytes"`
 	EmailQuotaPerDay  int       `json:"email_quota_per_day"`
@@ -44,7 +66,14 @@ type CreateResult struct {
 // Create provisions a new tenant (called from the super-admin dashboard,
 // e.g. when a new client like HANI'S signs up). Runs outside RLS since
 // no tenant context exists yet.
-func (s *Service) Create(ctx context.Context, name, slug string) (*CreateResult, error) {
+func (s *Service) Create(ctx context.Context, name, slug string, businessType string) (*CreateResult, error) {
+	if businessType == "" {
+		businessType = string(BusinessOther)
+	}
+	if !ValidBusinessType(businessType) {
+		return nil, apierror.ErrValidation
+	}
+
 	pubKey, err := randomKey("pk_live_")
 	if err != nil {
 		return nil, apierror.ErrInternal
@@ -61,11 +90,11 @@ func (s *Service) Create(ctx context.Context, name, slug string) (*CreateResult,
 	var t Tenant
 	err = s.pool.WithSystem(ctx, func(ctx context.Context, tx db.TxLike) error {
 		row := tx.QueryRow(ctx, `
-			INSERT INTO tenants (name, slug, api_key_public, api_key_secret_hash)
-			VALUES ($1, $2, $3, $4)
-			RETURNING id, name, slug, api_key_public, plan, storage_limit_bytes, storage_used_bytes, email_quota_per_day, rate_limit_per_sec, rate_limit_burst, is_active
-		`, name, slug, pubKey, string(secretHash))
-		return row.Scan(&t.ID, &t.Name, &t.Slug, &t.APIKeyPublic, &t.Plan,
+			INSERT INTO tenants (name, slug, api_key_public, api_key_secret_hash, business_type)
+			VALUES ($1, $2, $3, $4, $5)
+			RETURNING id, name, slug, api_key_public, plan, business_type, storage_limit_bytes, storage_used_bytes, email_quota_per_day, rate_limit_per_sec, rate_limit_burst, is_active
+		`, name, slug, pubKey, string(secretHash), businessType)
+		return row.Scan(&t.ID, &t.Name, &t.Slug, &t.APIKeyPublic, &t.Plan, &t.BusinessType,
 			&t.StorageLimitBytes, &t.StorageUsedBytes, &t.EmailQuotaPerDay, &t.RateLimitPerSec, &t.RateLimitBurst, &t.IsActive)
 	})
 	if err != nil {
@@ -81,7 +110,7 @@ func (s *Service) ListAll(ctx context.Context) ([]Tenant, error) {
 	var tenants []Tenant
 	err := s.pool.WithSystem(ctx, func(ctx context.Context, tx db.TxLike) error {
 		rows, err := tx.Query(ctx, `
-			SELECT id, name, slug, api_key_public, plan, storage_limit_bytes, storage_used_bytes, email_quota_per_day, rate_limit_per_sec, rate_limit_burst, is_active
+			SELECT id, name, slug, api_key_public, plan, business_type, storage_limit_bytes, storage_used_bytes, email_quota_per_day, rate_limit_per_sec, rate_limit_burst, is_active
 			FROM tenants ORDER BY created_at DESC
 		`)
 		if err != nil {
@@ -90,7 +119,7 @@ func (s *Service) ListAll(ctx context.Context) ([]Tenant, error) {
 		defer rows.Close()
 		for rows.Next() {
 			var t Tenant
-			if err := rows.Scan(&t.ID, &t.Name, &t.Slug, &t.APIKeyPublic, &t.Plan,
+			if err := rows.Scan(&t.ID, &t.Name, &t.Slug, &t.APIKeyPublic, &t.Plan, &t.BusinessType,
 				&t.StorageLimitBytes, &t.StorageUsedBytes, &t.EmailQuotaPerDay, &t.RateLimitPerSec, &t.RateLimitBurst, &t.IsActive); err != nil {
 				return err
 			}
@@ -120,6 +149,19 @@ func (s *Service) UpdateRateLimit(ctx context.Context, tenantID uuid.UUID, perSe
 	return s.pool.WithSystem(ctx, func(ctx context.Context, tx db.TxLike) error {
 		_, err := tx.Exec(ctx, `UPDATE tenants SET rate_limit_per_sec = $1, rate_limit_burst = $2, updated_at = now() WHERE id = $3`,
 			perSec, burst, tenantID)
+		return err
+	})
+}
+
+// UpdateBusinessType lets the super-admin correct or change a tenant's
+// business type after creation (e.g. HANI'S starts as "general" and later
+// gets recognized as "couture_sur_mesure" once the catalog is set up).
+func (s *Service) UpdateBusinessType(ctx context.Context, tenantID uuid.UUID, businessType string) error {
+	if !ValidBusinessType(businessType) {
+		return apierror.ErrValidation
+	}
+	return s.pool.WithSystem(ctx, func(ctx context.Context, tx db.TxLike) error {
+		_, err := tx.Exec(ctx, `UPDATE tenants SET business_type = $1, updated_at = now() WHERE id = $2`, businessType, tenantID)
 		return err
 	})
 }

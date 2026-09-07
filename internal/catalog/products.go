@@ -3,6 +3,14 @@
 // customer reviews. Gated per-tenant by internal/features — every method
 // here assumes the caller (internal/httpserver) has already checked
 // features.RequireCatalog for the tenant.
+//
+// The product model is business-agnostic on purpose: name/description/
+// price/category/images are common to any storefront, while sector-
+// specific fields (sizes/colors for a tailor, a download link for a
+// digital product, a brand/weight for general retail) live in the free-
+// form Attributes JSON rather than as dedicated columns. tenants.
+// business_type only hints at which Attributes shape the dashboard
+// suggests by default — it never restricts what a tenant can store.
 package catalog
 
 import (
@@ -16,17 +24,17 @@ import (
 )
 
 type Product struct {
-	ID          uuid.UUID       `json:"id"`
-	Name        string          `json:"name"`
-	Description string          `json:"description,omitempty"`
-	Price       int             `json:"price"`
-	Gender      string          `json:"gender,omitempty"`
-	Category    string          `json:"category,omitempty"`
-	Sizes       json.RawMessage `json:"sizes,omitempty"`
-	Colors      json.RawMessage `json:"colors,omitempty"`
-	IsFeatured  bool            `json:"is_featured"`
-	IsActive    bool            `json:"is_active"`
-	Images      []ProductImage  `json:"images,omitempty"`
+	ID            uuid.UUID       `json:"id"`
+	Name          string          `json:"name"`
+	Description   string          `json:"description,omitempty"`
+	Price         int             `json:"price"`
+	Category      string          `json:"category,omitempty"`
+	SKU           string          `json:"sku,omitempty"`
+	StockQuantity *int            `json:"stock_quantity,omitempty"` // nil = illimité/non suivi
+	Attributes    json.RawMessage `json:"attributes,omitempty"`
+	IsFeatured    bool            `json:"is_featured"`
+	IsActive      bool            `json:"is_active"`
+	Images        []ProductImage  `json:"images,omitempty"`
 }
 
 type ProductImage struct {
@@ -43,14 +51,14 @@ func NewProductService(pool *db.Pool) *ProductService {
 }
 
 type CreateProductInput struct {
-	Name        string
-	Description string
-	Price       int
-	Gender      string
-	Category    string
-	Sizes       json.RawMessage
-	Colors      json.RawMessage
-	IsFeatured  bool
+	Name          string
+	Description   string
+	Price         int
+	Category      string
+	SKU           string
+	StockQuantity *int
+	Attributes    json.RawMessage
+	IsFeatured    bool
 }
 
 func (s *ProductService) Create(ctx context.Context, tenantID uuid.UUID, in CreateProductInput) (*Product, error) {
@@ -61,11 +69,11 @@ func (s *ProductService) Create(ctx context.Context, tenantID uuid.UUID, in Crea
 	var p Product
 	err := s.pool.WithTenant(ctx, tenantID, func(ctx context.Context, tx db.TxLike) error {
 		row := tx.QueryRow(ctx, `
-			INSERT INTO products (tenant_id, name, description, price, gender, category, sizes, colors, is_featured)
+			INSERT INTO products (tenant_id, name, description, price, category, sku, stock_quantity, attributes, is_featured)
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-			RETURNING id, name, coalesce(description, ''), price, coalesce(gender, ''), coalesce(category, ''), sizes, colors, is_featured, is_active
-		`, tenantID, in.Name, in.Description, in.Price, in.Gender, in.Category, in.Sizes, in.Colors, in.IsFeatured)
-		return row.Scan(&p.ID, &p.Name, &p.Description, &p.Price, &p.Gender, &p.Category, &p.Sizes, &p.Colors, &p.IsFeatured, &p.IsActive)
+			RETURNING id, name, coalesce(description, ''), price, coalesce(category, ''), coalesce(sku, ''), stock_quantity, attributes, is_featured, is_active
+		`, tenantID, in.Name, in.Description, in.Price, in.Category, in.SKU, in.StockQuantity, in.Attributes, in.IsFeatured)
+		return row.Scan(&p.ID, &p.Name, &p.Description, &p.Price, &p.Category, &p.SKU, &p.StockQuantity, &p.Attributes, &p.IsFeatured, &p.IsActive)
 	})
 	if err != nil {
 		return nil, fmt.Errorf("catalog: create product: %w", err)
@@ -73,10 +81,11 @@ func (s *ProductService) Create(ctx context.Context, tenantID uuid.UUID, in Crea
 	return &p, nil
 }
 
-// ListFilter drives GET /catalog/products query params: filter by
-// gender/category, sort by price/newest/featured.
+// ListFilter drives GET /products query params: filter by category, sort
+// by price/newest/featured. Attribute-level filtering (e.g. by size or
+// gender) is intentionally left to the client — Attributes is free-form
+// per tenant, so there's no fixed set of filterable fields to index here.
 type ListFilter struct {
-	Gender   string
 	Category string
 	Sort     string // "price_asc" | "price_desc" | "newest" | "featured"
 }
@@ -95,20 +104,13 @@ func (s *ProductService) List(ctx context.Context, tenantID uuid.UUID, f ListFil
 	var products []Product
 	err := s.pool.WithTenant(ctx, tenantID, func(ctx context.Context, tx db.TxLike) error {
 		query := `
-			SELECT id, name, coalesce(description, ''), price, coalesce(gender, ''), coalesce(category, ''), sizes, colors, is_featured, is_active
+			SELECT id, name, coalesce(description, ''), price, coalesce(category, ''), coalesce(sku, ''), stock_quantity, attributes, is_featured, is_active
 			FROM products
 			WHERE is_active = true
 		`
 		args := []any{}
-		argN := 1
-		if f.Gender != "" {
-			argN++
-			query += fmt.Sprintf(" AND gender = $%d", argN-1)
-			args = append(args, f.Gender)
-		}
 		if f.Category != "" {
-			argN++
-			query += fmt.Sprintf(" AND category = $%d", argN-1)
+			query += " AND category = $1"
 			args = append(args, f.Category)
 		}
 		query += " ORDER BY " + orderBy + " LIMIT 200"
@@ -120,7 +122,7 @@ func (s *ProductService) List(ctx context.Context, tenantID uuid.UUID, f ListFil
 		defer rows.Close()
 		for rows.Next() {
 			var p Product
-			if err := rows.Scan(&p.ID, &p.Name, &p.Description, &p.Price, &p.Gender, &p.Category, &p.Sizes, &p.Colors, &p.IsFeatured, &p.IsActive); err != nil {
+			if err := rows.Scan(&p.ID, &p.Name, &p.Description, &p.Price, &p.Category, &p.SKU, &p.StockQuantity, &p.Attributes, &p.IsFeatured, &p.IsActive); err != nil {
 				return err
 			}
 			products = append(products, p)
@@ -137,10 +139,10 @@ func (s *ProductService) Get(ctx context.Context, tenantID, productID uuid.UUID)
 	var p Product
 	err := s.pool.WithTenant(ctx, tenantID, func(ctx context.Context, tx db.TxLike) error {
 		row := tx.QueryRow(ctx, `
-			SELECT id, name, coalesce(description, ''), price, coalesce(gender, ''), coalesce(category, ''), sizes, colors, is_featured, is_active
+			SELECT id, name, coalesce(description, ''), price, coalesce(category, ''), coalesce(sku, ''), stock_quantity, attributes, is_featured, is_active
 			FROM products WHERE id = $1
 		`, productID)
-		if err := row.Scan(&p.ID, &p.Name, &p.Description, &p.Price, &p.Gender, &p.Category, &p.Sizes, &p.Colors, &p.IsFeatured, &p.IsActive); err != nil {
+		if err := row.Scan(&p.ID, &p.Name, &p.Description, &p.Price, &p.Category, &p.SKU, &p.StockQuantity, &p.Attributes, &p.IsFeatured, &p.IsActive); err != nil {
 			return apierror.ErrNotFound
 		}
 

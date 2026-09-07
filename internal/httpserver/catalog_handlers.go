@@ -19,7 +19,6 @@ func (s *Server) handleListProducts(w http.ResponseWriter, r *http.Request) {
 	t, _ := authmw.TenantFromContext(r.Context())
 
 	f := catalog.ListFilter{
-		Gender:   r.URL.Query().Get("gender"),
 		Category: r.URL.Query().Get("category"),
 		Sort:     r.URL.Query().Get("sort"),
 	}
@@ -36,14 +35,14 @@ func (s *Server) handleCreateProduct(w http.ResponseWriter, r *http.Request) {
 	t, _ := authmw.TenantFromContext(r.Context())
 
 	var body struct {
-		Name        string          `json:"name"`
-		Description string          `json:"description"`
-		Price       int             `json:"price"`
-		Gender      string          `json:"gender"`
-		Category    string          `json:"category"`
-		Sizes       json.RawMessage `json:"sizes"`
-		Colors      json.RawMessage `json:"colors"`
-		IsFeatured  bool            `json:"is_featured"`
+		Name          string          `json:"name"`
+		Description   string          `json:"description"`
+		Price         int             `json:"price"`
+		Category      string          `json:"category"`
+		SKU           string          `json:"sku"`
+		StockQuantity *int            `json:"stock_quantity"`
+		Attributes    json.RawMessage `json:"attributes"`
+		IsFeatured    bool            `json:"is_featured"`
 	}
 	if err := decodeJSON(r, &body); err != nil {
 		response.Err(w, apierror.ErrValidation)
@@ -51,14 +50,14 @@ func (s *Server) handleCreateProduct(w http.ResponseWriter, r *http.Request) {
 	}
 
 	p, err := s.products.Create(r.Context(), t.ID, catalog.CreateProductInput{
-		Name:        body.Name,
-		Description: body.Description,
-		Price:       body.Price,
-		Gender:      body.Gender,
-		Category:    body.Category,
-		Sizes:       body.Sizes,
-		Colors:      body.Colors,
-		IsFeatured:  body.IsFeatured,
+		Name:          body.Name,
+		Description:   body.Description,
+		Price:         body.Price,
+		Category:      body.Category,
+		SKU:           body.SKU,
+		StockQuantity: body.StockQuantity,
+		Attributes:    body.Attributes,
+		IsFeatured:    body.IsFeatured,
 	})
 	if err != nil {
 		response.Err(w, err)

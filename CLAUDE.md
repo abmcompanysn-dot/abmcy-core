@@ -103,6 +103,21 @@ Domaines confirmés (2026-09-07) :
   `orders` a été étendu (customer_id, fabric_id/fabric_source,
   shipping_address, notes, statuts enrichis) et `order_status_history`
   ajouté pour tracer chaque changement de statut.
+- **Catalogue produit générique, pas figé sur la couture** (précisé le
+  2026-09-07, juste après le point précédent — l'utilisateur a demandé "les
+  deux" entre un catalogue guidé par type de commerce et un catalogue
+  100% libre). `products` n'a plus de colonnes dédiées `gender`/`sizes`/
+  `colors` : elles vivent dans `products.attributes` (JSONB libre), avec
+  `sku`/`stock_quantity` en colonnes propres (assez universels pour être
+  utiles à tout secteur). `tenants.business_type` (`couture_sur_mesure` |
+  `commerce_general` | `produit_numerique` | `general`, voir
+  `internal/tenant/tenant.go` `BusinessType`/`ValidBusinessType`) indique
+  seulement au dashboard quelle forme d'`attributes` suggérer par défaut —
+  ça ne restreint jamais ce qu'un tenant peut y stocker. Modifiable via
+  `PUT /admin/tenants/{id}/business-type`. `fabrics`/`measurements`
+  restent des tables séparées (spécifiques sur-mesure) — un tenant
+  `commerce_general` ou `produit_numerique` les ignore simplement, elles
+  ne sont pas mélangées au modèle produit générique.
 
 ## État d'avancement
 
@@ -127,6 +142,7 @@ Domaines confirmés (2026-09-07) :
     `GET /reviews/pending`, `POST /reviews/{id}/publish`
   - Scopées `X-Admin-Key` : `GET/POST /admin/tenants`,
     `PUT /admin/tenants/{id}/rate-limit`,
+    `PUT /admin/tenants/{id}/business-type`,
     `GET/PUT /admin/tenants/{id}/features`, `GET /admin/config`,
     `PUT /admin/config/{key}`, `GET /admin/traffic`,
     `GET /admin/traffic/{tenantID}`

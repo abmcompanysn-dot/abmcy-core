@@ -172,6 +172,7 @@ func (s *Server) routes(rl *authmw.RateLimit) {
 		r.Get("/admin/tenants", s.handleAdminListTenants)
 		r.Post("/admin/tenants", s.handleAdminCreateTenant)
 		r.Put("/admin/tenants/{tenantID}/rate-limit", s.handleAdminUpdateRateLimit)
+		r.Put("/admin/tenants/{tenantID}/business-type", s.handleAdminUpdateBusinessType)
 		r.Get("/admin/tenants/{tenantID}/features", s.handleAdminGetFeatures)
 		r.Put("/admin/tenants/{tenantID}/features", s.handleAdminUpdateFeatures)
 

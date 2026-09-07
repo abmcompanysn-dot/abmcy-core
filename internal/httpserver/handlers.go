@@ -370,15 +370,16 @@ func (s *Server) handleAdminListTenants(w http.ResponseWriter, r *http.Request) 
 
 func (s *Server) handleAdminCreateTenant(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Name string `json:"name"`
-		Slug string `json:"slug"`
+		Name         string `json:"name"`
+		Slug         string `json:"slug"`
+		BusinessType string `json:"business_type"`
 	}
 	if err := decodeJSON(r, &body); err != nil {
 		response.Err(w, apierror.ErrValidation)
 		return
 	}
 
-	result, err := s.tenants.Create(r.Context(), body.Name, body.Slug)
+	result, err := s.tenants.Create(r.Context(), body.Name, body.Slug, body.BusinessType)
 	if err != nil {
 		response.Err(w, err)
 		return
@@ -387,6 +388,28 @@ func (s *Server) handleAdminCreateTenant(w http.ResponseWriter, r *http.Request)
 		"tenant":         result.Tenant,
 		"api_key_secret": result.APIKeySecret, // shown once — client must store it now
 	})
+}
+
+func (s *Server) handleAdminUpdateBusinessType(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := parseUUID(chi.URLParam(r, "tenantID"))
+	if err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+
+	var body struct {
+		BusinessType string `json:"business_type"`
+	}
+	if err := decodeJSON(r, &body); err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+
+	if err := s.tenants.UpdateBusinessType(r.Context(), tenantID, body.BusinessType); err != nil {
+		response.Err(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) handleAdminUpdateRateLimit(w http.ResponseWriter, r *http.Request) {

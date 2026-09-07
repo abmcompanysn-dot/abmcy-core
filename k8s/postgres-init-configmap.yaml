@@ -35,6 +35,12 @@ data:
         api_key_public       VARCHAR(255) UNIQUE NOT NULL,
         api_key_secret_hash  VARCHAR(255) NOT NULL,           -- bcrypt hash, jamais la clé en clair
         plan                 VARCHAR(30) NOT NULL DEFAULT 'free', -- free | starter | pro | enterprise
+        business_type        VARCHAR(50) NOT NULL DEFAULT 'general',
+            -- couture_sur_mesure | commerce_general | produit_numerique | general
+            -- Indique au dashboard quel jeu de champs `products.attributes`
+            -- proposer par défaut (tailles/couleurs, stock/SKU, lien de
+            -- téléchargement...). Un tenant reste libre d'utiliser n'importe
+            -- quel attribut quel que soit son business_type.
         storage_limit_bytes  BIGINT NOT NULL DEFAULT 5368709120,  -- 5 Go
         storage_used_bytes   BIGINT NOT NULL DEFAULT 0,
         email_quota_per_day  INT NOT NULL DEFAULT 100,
@@ -80,6 +86,16 @@ data:
 
     -- ============================================================
     -- PRODUCTS / CATALOG
+    --
+    -- Le catalogue est générique : name/description/price/category/images sont
+    -- communs à tout type de commerce. Les champs propres à un secteur
+    -- (tailles/couleurs pour la couture, lien de téléchargement pour le
+    -- numérique, référence fournisseur pour un commerce général, ...) vivent
+    -- dans `attributes` (JSONB libre) plutôt que dans des colonnes dédiées —
+    -- ça évite d'ajouter une colonne par secteur d'activité à chaque nouveau
+    -- type de tenant. `business_type` sur tenants (voir plus bas) indique au
+    -- dashboard quel jeu de champs `attributes` proposer par défaut, mais
+    -- n'importe quel tenant peut y mettre ce qu'il veut.
     -- ============================================================
     CREATE TABLE products (
         id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -87,10 +103,13 @@ data:
         name        VARCHAR(150) NOT NULL,
         description TEXT,
         price       INT NOT NULL,           -- en FCFA
-        gender      VARCHAR(20),            -- femme | homme | unisexe
-        category    VARCHAR(100),           -- ex: robes, ensembles, prière
-        sizes       JSONB,                  -- ex: ["S","M","L","XL"]
-        colors      JSONB,                  -- ex: ["Bleu nuit","Blanc cassé"]
+        category    VARCHAR(100),           -- libre : ex "robes" (couture) ou "épicerie" (commerce général)
+        sku         VARCHAR(100),           -- référence produit, utile hors couture
+        stock_quantity INT,                 -- NULL = stock illimité/non suivi (ex: sur-mesure, numérique)
+        attributes  JSONB,                  -- libre, structure dépendant du business_type du tenant
+                                             -- ex couture: {"gender":"femme","sizes":["S","M","L"],"colors":["Bleu nuit"]}
+                                             -- ex numérique: {"download_url":"...","file_size_mb":12,"license":"perso"}
+                                             -- ex commerce général: {"brand":"...","weight_kg":1.5}
         is_featured BOOLEAN NOT NULL DEFAULT FALSE, -- "meilleures ventes" / mise en avant
         is_active   BOOLEAN NOT NULL DEFAULT TRUE,
         created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
