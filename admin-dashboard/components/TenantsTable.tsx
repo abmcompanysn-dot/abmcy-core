@@ -1,8 +1,15 @@
 import type { Tenant } from "@/lib/api";
 import { StorageBar } from "./StorageBar";
 import { StatusBadge } from "./StatusBadge";
+import { RateLimitEditor } from "./RateLimitEditor";
 
-export function TenantsTable({ tenants }: { tenants: Tenant[] }) {
+export function TenantsTable({
+  tenants,
+  onRateLimitSaved,
+}: {
+  tenants: Tenant[];
+  onRateLimitSaved?: (tenantId: string, perSec: number, burst: number) => void;
+}) {
   if (tenants.length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center text-sm text-slate-500">
@@ -22,6 +29,7 @@ export function TenantsTable({ tenants }: { tenants: Tenant[] }) {
             <th className="px-4 py-3 font-medium">Statut</th>
             <th className="px-4 py-3 font-medium">Stockage</th>
             <th className="px-4 py-3 font-medium">Quota email / jour</th>
+            <th className="px-4 py-3 font-medium">Limite de trafic</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
@@ -49,6 +57,16 @@ export function TenantsTable({ tenants }: { tenants: Tenant[] }) {
               </td>
               <td className="px-4 py-3 text-slate-700">
                 {t.email_quota_per_day.toLocaleString("fr-FR")} / jour
+              </td>
+              <td className="px-4 py-3">
+                <RateLimitEditor
+                  tenantId={t.id}
+                  perSec={t.rate_limit_per_sec}
+                  burst={t.rate_limit_burst}
+                  onSaved={(perSec, burst) =>
+                    onRateLimitSaved?.(t.id, perSec, burst)
+                  }
+                />
               </td>
             </tr>
           ))}

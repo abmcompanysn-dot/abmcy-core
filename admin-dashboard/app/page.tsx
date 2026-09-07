@@ -67,6 +67,22 @@ export default function TenantsPage() {
     setTenants((prev) => (prev ? [...prev, tenant] : [tenant]));
   }
 
+  function handleRateLimitSaved(
+    tenantId: string,
+    perSec: number,
+    burst: number
+  ) {
+    setTenants((prev) =>
+      prev
+        ? prev.map((t) =>
+            t.id === tenantId
+              ? { ...t, rate_limit_per_sec: perSec, rate_limit_burst: burst }
+              : t
+          )
+        : prev
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -98,7 +114,10 @@ export default function TenantsPage() {
           Chargement des tenants...
         </div>
       ) : (
-        <TenantsTable tenants={tenants ?? []} />
+        <TenantsTable
+          tenants={tenants ?? []}
+          onRateLimitSaved={handleRateLimitSaved}
+        />
       )}
     </div>
   );

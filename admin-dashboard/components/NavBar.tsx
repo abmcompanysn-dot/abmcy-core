@@ -6,6 +6,8 @@ import { useAuth } from "@/lib/auth-context";
 
 const links = [
   { href: "/", label: "Tenants" },
+  { href: "/trafic", label: "Trafic" },
+  { href: "/services", label: "Services" },
   { href: "/config", label: "Configuration" },
 ];
 
@@ -24,7 +26,10 @@ export function NavBar() {
           </span>
           <nav className="flex gap-1">
             {links.map((link) => {
-              const active = pathname === link.href;
+              const active =
+                link.href === "/"
+                  ? pathname === "/"
+                  : pathname === link.href || pathname.startsWith(`${link.href}/`);
               return (
                 <Link
                   key={link.href}

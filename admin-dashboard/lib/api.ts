@@ -47,12 +47,50 @@ export interface Tenant {
   storage_limit_bytes: number;
   storage_used_bytes: number;
   email_quota_per_day: number;
+  rate_limit_per_sec: number;
+  rate_limit_burst: number;
   is_active: boolean;
 }
 
 export interface CreateTenantResponse {
   tenant: Tenant;
   api_key_secret: string;
+}
+
+/** Clés de configuration plateforme gérées par /admin/config. */
+export type ConfigKey =
+  | "R2_ACCOUNT_ID"
+  | "R2_ACCESS_KEY_ID"
+  | "R2_SECRET_ACCESS_KEY"
+  | "R2_BUCKET"
+  | "R2_PUBLIC_URL"
+  | "RESEND_API_KEY"
+  | "RESEND_FROM_ADDR"
+  | "CINETPAY_API_KEY"
+  | "CINETPAY_SITE_ID";
+
+export interface ConfigStatus {
+  key: ConfigKey;
+  configured: boolean;
+  /** Absent pour les clés secrètes, même lorsqu'elles sont configurées. */
+  value?: string;
+}
+
+export interface TrafficSummary {
+  tenant_id: string;
+  tenant_slug: string;
+  request_count: number;
+  error_count: number;
+  rate_limited_count: number;
+}
+
+export interface RecentRequest {
+  method: string;
+  path: string;
+  status_code: number;
+  duration_ms: number;
+  rate_limited: boolean;
+  created_at: string;
 }
 
 interface ApiErrorBody {
@@ -141,6 +179,58 @@ export function createTenant(
     method: "POST",
     body: JSON.stringify(input),
   });
+}
+
+/** PUT /admin/tenants/{tenantID}/rate-limit — met à jour les limites de trafic d'un tenant. */
+export function updateTenantRateLimit(
+  adminKey: string,
+  tenantId: string,
+  input: { rate_limit_per_sec: number; rate_limit_burst: number }
+): Promise<void> {
+  return request<void>(
+    `/admin/tenants/${encodeURIComponent(tenantId)}/rate-limit`,
+    adminKey,
+    {
+      method: "PUT",
+      body: JSON.stringify(input),
+    }
+  );
+}
+
+/** GET /admin/config — statut de chaque clé de configuration plateforme. */
+export function getConfigStatus(adminKey: string): Promise<ConfigStatus[]> {
+  return request<ConfigStatus[]>("/admin/config", adminKey, { method: "GET" });
+}
+
+/** PUT /admin/config/{key} — définit ou modifie une clé de configuration. */
+export function setConfigValue(
+  adminKey: string,
+  key: ConfigKey,
+  value: string
+): Promise<void> {
+  return request<void>(`/admin/config/${encodeURIComponent(key)}`, adminKey, {
+    method: "PUT",
+    body: JSON.stringify({ value }),
+  });
+}
+
+/** GET /admin/traffic — résumé du trafic des dernières 24h, par tenant. */
+export function getTrafficSummary(adminKey: string): Promise<TrafficSummary[]> {
+  return request<TrafficSummary[]>("/admin/traffic", adminKey, {
+    method: "GET",
+  });
+}
+
+/** GET /admin/traffic/{tenantID} — les 100 dernières requêtes d'un tenant. */
+export function getTenantTraffic(
+  adminKey: string,
+  tenantId: string
+): Promise<RecentRequest[]> {
+  return request<RecentRequest[]>(
+    `/admin/traffic/${encodeURIComponent(tenantId)}`,
+    adminKey,
+    { method: "GET" }
+  );
 }
 
 /** GET /health — simple vérification de disponibilité de l'API. */
