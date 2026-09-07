@@ -65,6 +65,28 @@ Domaines confirmés (2026-09-07) :
     publique du tenant (`X-API-Key`, format `pk_live_...`).
   Les deux sont en Next.js 16 (App Router, TypeScript strict, Tailwind CSS v4),
   déployés séparément sur Vercel.
+- **Clés de service configurables au runtime, pas en `.env`** (décidé le
+  2026-09-07, sur demande explicite) : R2, Resend, CinetPay ne sont plus des
+  variables d'environnement obligatoires au démarrage. Elles se configurent
+  depuis le dashboard admin (page Configuration) et sont stockées chiffrées
+  (AES-GCM) dans la table `platform_config` — voir `internal/platformconfig`.
+  Seuls `DATABASE_URL`, `JWT_SECRET`, `CONFIG_ENCRYPTION_KEY` (déchiffre
+  `platform_config`, généré via `openssl rand -base64 32`) et `ADMIN_API_KEY`
+  restent obligatoires en env var. Un déploiement sans R2/Resend/CinetPay
+  configurés démarre quand même ; les endpoints concernés répondent 503
+  (`storage_not_configured`, `email_not_configured`, `payment_not_configured`)
+  jusqu'à leur configuration depuis le dashboard.
+- **Rate limit configurable par tenant** (`tenants.rate_limit_per_sec` /
+  `rate_limit_burst`, défaut 5/20), modifiable via
+  `PUT /admin/tenants/{id}/rate-limit` depuis le dashboard admin — plus une
+  limite globale fixe pour tous les tenants.
+- **Traçage léger du trafic** : chaque requête tenant-scopée est loggée
+  (fire-and-forget, `internal/middleware/traffic_log.go`) dans
+  `request_logs` (méthode, chemin, statut, durée, si rate-limited).
+  Agrégé par `internal/traffic` pour la vue "Trafic" du dashboard admin
+  (`GET /admin/traffic`, `/admin/traffic/{tenantID}`). Pas encore de purge
+  automatique — `traffic.Service.PurgeOlderThan` existe mais n'est appelée
+  par aucun job planifié pour l'instant.
 
 ## État d'avancement
 
@@ -80,7 +102,10 @@ Domaines confirmés (2026-09-07) :
   - `POST /webhooks/cinetpay/{tenantSlug}`
   - Scopées `X-API-Key` : `POST/GET /orders`, `POST /uploads/image`,
     `POST /payments/init`, `POST /notifications/email`
-  - Scopées `X-Admin-Key` : `GET/POST /admin/tenants`
+  - Scopées `X-Admin-Key` : `GET/POST /admin/tenants`,
+    `PUT /admin/tenants/{id}/rate-limit`, `GET /admin/config`,
+    `PUT /admin/config/{key}`, `GET /admin/traffic`,
+    `GET /admin/traffic/{tenantID}`
 - `admin-dashboard/` : build de production (`npm run build`) et lint
   (`npm run lint`) passent sans erreur ni avertissement. Fonctionnalités :
   connexion par clé admin, tableau des tenants avec jauge de stockage,
@@ -125,16 +150,29 @@ Domaines confirmés (2026-09-07) :
 
 ## Prochaines étapes probables
 
-À proposer/discuter avec l'utilisateur plutôt qu'à supposer :
+L'utilisateur a demandé (2026-09-07) une suite de fonctionnalités à traiter
+**une par une, dans cet ordre de priorité qu'il a validé** — ne pas sauter
+d'étape ni tout lancer en parallèle sans validation :
 1. ~~Confirmer le build de `tenant-dashboard/`~~ — fait, build + lint propres.
-2. Construire `landing/` (site vitrine Next.js sur `core.abmcy.com`) avec une
-   animation de blocs qui se construisent pour visualiser l'architecture —
-   demandé explicitement, pas encore commencé.
-3. Implémenter `internal/catalog/` (produits/collections) si le dashboard
+2. ~~Construire `landing/`~~ — fait, animation d'architecture au scroll.
+3. ~~Config R2/Resend/CinetPay dynamique + rate-limit par tenant + traçage
+   du trafic~~ — fait, backend (`go build`/`go vet` OK) et dashboard admin
+   (`admin-dashboard/app/services`, `admin-dashboard/app/trafic` +
+   `/trafic/[tenantId]`, édition rate-limit dans TenantsTable) — build +
+   lint confirmés deux fois (agent puis vérification indépendante).
+4. **Authentification admin réelle** (comptes individuels login/mot de passe
+   au lieu de la clé `X-Admin-Key` statique partagée) — priorité suivante,
+   pas encore commencée.
+5. Monitoring + alertes de sécurité (email en cas d'anomalie : pics
+   d'erreurs, échecs de connexion répétés, quota dépassé) — pas commencé.
+6. Sitemap XML (référencement `landing/`) + flux XML produits par tenant
+   (type Google Shopping) — pas commencé.
+7. Implémenter `internal/catalog/` (produits/collections) si le dashboard
    tenant doit vraiment gérer un catalogue (actuellement il ne gère que
-   commandes + photos brutes).
-4. Décider du sort du JWT (`/auth/login`) vs clé API pour l'auth tenant.
-5. Déploiement réel : k3s sur le VPS + vraies clés + DNS (3 sous-domaines
+   commandes + photos brutes) — pas explicitement priorisé par l'utilisateur,
+   à confirmer avant de s'y lancer.
+8. Déploiement réel : k3s sur le VPS + vraies clés + DNS (4 sous-domaines
    `.abmcy.com` à pointer : `api`, `ad`, `dash`, `core`).
-6. Initialiser un dépôt Git (`git init`) — pas encore fait, nécessaire avant
-   de connecter Vercel pour un déploiement automatique par push.
+
+Dépôt Git initialisé le 2026-09-07 (`git init`, commits réguliers depuis) —
+pas encore de remote GitHub configuré par l'utilisateur à cette date.
