@@ -201,12 +201,15 @@ d'étape ni tout lancer en parallèle sans validation :
    `/trafic/[tenantId]`, édition rate-limit dans TenantsTable) — build +
    lint confirmés deux fois (agent puis vérification indépendante).
 4. ~~Service catalogue optionnel (produits, tissus, panier, mesures,
-   galerie, avis), opt-in par tenant~~ — **priorité réordonnée en cours de
-   route par l'utilisateur (2026-09-07)**, passée devant l'auth admin.
-   Backend fait et vérifié (`go build`/`go vet` OK, YAML k8s régénéré).
-   **Le dashboard tenant (`tenant-dashboard/`) et le dashboard admin
-   (activation du catalogue par tenant) ne consomment pas encore ces
-   routes — à faire avant de considérer cette étape terminée.**
+   galerie, avis), opt-in par tenant, rendu générique (pas figé sur la
+   couture, business_type indicatif seulement) — dashboards tenant et
+   admin connectés~~ — **fait de bout en bout (2026-09-07)** : backend
+   (`go build`/`go vet` OK), dashboard admin (sélecteur business_type +
+   interrupteur "Catalogue activé" par tenant dans `TenantsTable`), et
+   dashboard tenant (pages `/catalogue`, `/tissus`, `/galerie`, `/avis`,
+   navigation conditionnée à `GET /features`, détail commande enrichi
+   avec historique de statut). Build + lint confirmés (agent puis
+   vérification indépendante) pour les deux dashboards.
 5. **Authentification admin réelle** (comptes individuels login/mot de passe
    au lieu de la clé `X-Admin-Key` statique partagée) — pas encore
    commencée.
