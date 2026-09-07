@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import {
+  adminLogin,
   clearStoredAdminKey,
   getStoredAdminKey,
   listTenants,
@@ -15,10 +16,12 @@ import {
 } from "./api";
 
 interface AuthContextValue {
-  /** Clé admin actuellement utilisée, ou null si non connecté. */
+  /** Credential admin actuellement utilisée (JWT ou clé statique), ou null si non connecté. */
   adminKey: string | null;
-  /** Tente une connexion avec la clé fournie ; lève une erreur si invalide. */
+  /** Connexion via la clé X-Admin-Key statique (secours bootstrap). */
   login: (key: string) => Promise<void>;
+  /** Connexion via email/mot de passe (compte créé avec POST /admin/accounts). */
+  loginWithPassword: (email: string, password: string) => Promise<void>;
   logout: () => void;
 }
 
@@ -62,13 +65,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     notifyAdminKeyChanged();
   }, []);
 
+  const loginWithPassword = useCallback(async (email: string, password: string) => {
+    const token = await adminLogin(email.trim(), password);
+    storeAdminKey(token);
+    notifyAdminKeyChanged();
+  }, []);
+
   const logout = useCallback(() => {
     clearStoredAdminKey();
     notifyAdminKeyChanged();
   }, []);
 
   return (
-    <AuthContext.Provider value={{ adminKey, login, logout }}>
+    <AuthContext.Provider value={{ adminKey, login, loginWithPassword, logout }}>
       {children}
     </AuthContext.Provider>
   );

@@ -1,6 +1,11 @@
 // Client centralisant tous les appels vers le backend ABMCY Core.
-// Toutes les requêtes admin injectent le header X-Admin-Key, lu depuis
-// le localStorage du navigateur (jamais stocké en dur dans le code).
+// Toutes les requêtes admin injectent une credential lue depuis le
+// localStorage du navigateur (jamais stockée en dur dans le code) : soit
+// un JWT obtenu via POST /admin/auth/login (compte email/mot de passe),
+// envoyé en "Authorization: Bearer ...", soit la clé X-Admin-Key statique
+// historique (secours bootstrap tant qu'aucun compte n'existe encore).
+// Un JWT contient toujours exactement deux points — même heuristique que
+// httpserver.staffAuth côté backend pour distinguer les deux formats.
 
 export const API_URL =
   process.env.NEXT_PUBLIC_API_URL?.replace(/\/+$/, "") ||
@@ -142,18 +147,27 @@ export class ApiError extends Error {
   }
 }
 
+/** Un JWT a toujours exactement deux points ; une clé X-Admin-Key statique jamais. */
+function isJwt(credential: string): boolean {
+  return (credential.match(/\./g) ?? []).length === 2;
+}
+
 async function request<T>(
   path: string,
   adminKey: string,
   init?: RequestInit
 ): Promise<T> {
+  const authHeaders: Record<string, string> = isJwt(adminKey)
+    ? { Authorization: `Bearer ${adminKey}` }
+    : { "X-Admin-Key": adminKey };
+
   let res: Response;
   try {
     res = await fetch(`${API_URL}${path}`, {
       ...init,
       headers: {
         "Content-Type": "application/json",
-        "X-Admin-Key": adminKey,
+        ...authHeaders,
         ...(init?.headers ?? {}),
       },
       cache: "no-store",
@@ -192,6 +206,45 @@ async function request<T>(
   }
 
   return (await res.json()) as T;
+}
+
+/**
+ * POST /admin/auth/login — échange email/mot de passe contre un JWT
+ * admin. N'utilise pas request() : à ce stade on n'a encore aucune
+ * credential à envoyer, c'est justement cet appel qui en produit une.
+ */
+export async function adminLogin(email: string, password: string): Promise<string> {
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}/admin/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+      cache: "no-store",
+    });
+  } catch {
+    throw new ApiError(
+      0,
+      "Impossible de contacter le serveur. Vérifiez l'URL de l'API et votre connexion."
+    );
+  }
+
+  if (!res.ok) {
+    let body: ApiErrorBody | null = null;
+    try {
+      body = await res.json();
+    } catch {
+      // corps non-JSON ou vide
+    }
+    throw new ApiError(
+      res.status,
+      body?.error?.message || "Email ou mot de passe incorrect.",
+      body?.error?.code
+    );
+  }
+
+  const { token } = (await res.json()) as { token: string };
+  return token;
 }
 
 /** GET /admin/tenants — liste tous les tenants. */
