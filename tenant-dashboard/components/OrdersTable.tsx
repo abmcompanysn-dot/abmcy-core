@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { Order } from "@/lib/api";
 import { formatDate, formatFCFA } from "@/lib/format";
 import { OrderStatusBadge } from "./OrderStatusBadge";
@@ -34,7 +35,12 @@ export function OrdersTable({ orders }: { orders: Order[] }) {
               className="border-b border-slate-100 last:border-0 hover:bg-slate-50"
             >
               <td className="px-4 py-3 font-mono text-xs text-slate-700">
-                {order.order_number}
+                <Link
+                  href={`/commandes/${order.id}`}
+                  className="text-indigo-600 hover:underline"
+                >
+                  {order.order_number}
+                </Link>
               </td>
               <td className="px-4 py-3 text-slate-900">
                 {order.customer_name}
@@ -52,7 +58,15 @@ export function OrdersTable({ orders }: { orders: Order[] }) {
                 {formatDate(order.created_at)}
               </td>
               <td className="px-4 py-3 text-right">
-                <PaymentButton order={order} />
+                <div className="flex flex-col items-end gap-2">
+                  <Link
+                    href={`/commandes/${order.id}`}
+                    className="text-xs font-medium text-slate-500 hover:text-indigo-600 hover:underline"
+                  >
+                    Voir le détail
+                  </Link>
+                  <PaymentButton order={order} />
+                </div>
               </td>
             </tr>
           ))}

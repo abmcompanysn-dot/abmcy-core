@@ -3,18 +3,39 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
+import { useFeatures } from "@/lib/features-context";
 
-const links = [
-  { href: "/", label: "Commandes" },
+const baseLinks = [{ href: "/", label: "Commandes" }];
+
+// Ces onglets dépendent du feature flag catalog_enabled (voir GET
+// /features) : un tenant qui n'a pas le catalogue activé ne doit pas
+// pouvoir y accéder, pour éviter de cliquer dans le vide sur des routes
+// qui renvoient 403 catalog_not_enabled.
+const catalogLinks = [
+  { href: "/catalogue", label: "Catalogue" },
+  { href: "/tissus", label: "Tissus" },
+  { href: "/galerie", label: "Galerie" },
+  { href: "/avis", label: "Avis" },
+];
+
+const trailingLinks = [
   { href: "/photos", label: "Photos" },
   { href: "/parametres", label: "Paramètres" },
 ];
 
 export function NavBar() {
   const { apiKey, logout } = useAuth();
+  const { features } = useFeatures();
   const pathname = usePathname();
 
   if (!apiKey) return null;
+
+  const catalogEnabled = features?.catalog_enabled ?? false;
+  const links = [
+    ...baseLinks,
+    ...(catalogEnabled ? catalogLinks : []),
+    ...trailingLinks,
+  ];
 
   return (
     <header className="border-b border-slate-200 bg-white">
@@ -23,7 +44,7 @@ export function NavBar() {
           <span className="text-lg font-semibold text-slate-900">
             ABMCY <span className="text-indigo-600">Dashboard</span>
           </span>
-          <nav className="flex gap-1">
+          <nav className="flex flex-wrap gap-1">
             {links.map((link) => {
               const active = pathname === link.href;
               return (
@@ -40,6 +61,14 @@ export function NavBar() {
                 </Link>
               );
             })}
+            {!catalogEnabled && (
+              <span
+                title="Catalogue non activé pour votre compte. Contactez ABMCY pour l'activer."
+                className="flex cursor-help items-center rounded-md px-3 py-1.5 text-sm font-medium text-slate-300"
+              >
+                Catalogue non activé
+              </span>
+            )}
           </nav>
         </div>
         <button

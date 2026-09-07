@@ -51,12 +51,18 @@ export type OrderStatus =
 export interface Order {
   id: string;
   order_number: string;
+  customer_id?: string;
   customer_name: string;
   customer_phone: string;
   customer_email?: string;
+  shipping_address?: string;
   total_amount: number;
   status: OrderStatus;
   measurements?: Record<string, unknown> | null;
+  measurements_id?: string;
+  fabric_id?: string;
+  fabric_source?: FabricSource;
+  notes?: string;
   created_at: string;
 }
 
@@ -66,6 +72,168 @@ export interface CreateOrderInput {
   customer_email?: string;
   total_amount: number;
   measurements?: Record<string, unknown>;
+}
+
+/** Champs qu'un tenant peut encore modifier avant validation (pending/confirmed). */
+export interface UpdateOrderInput {
+  shipping_address?: string;
+  measurements?: Record<string, unknown>;
+  notes?: string;
+}
+
+export interface OrderStatusEvent {
+  status: OrderStatus;
+  comment?: string;
+  created_at: string;
+}
+
+/** maison = tissu du catalogue, envoi_photo = le client envoie sa propre photo,
+ * conseil_atelier = le client laisse le choix à l'atelier. */
+export type FabricSource = "maison" | "envoi_photo" | "conseil_atelier" | string;
+
+export interface CreateCustomOrderInput {
+  customer_name: string;
+  customer_phone: string;
+  customer_email?: string;
+  shipping_address?: string;
+  total_amount: number;
+  measurements?: Record<string, unknown>;
+  fabric_id?: string;
+  fabric_source?: FabricSource;
+  notes?: string;
+}
+
+export type Gender = "femme" | "homme";
+
+export interface SaveMeasurementsInput {
+  customer_name: string;
+  customer_phone: string;
+  gender: Gender;
+  values: Record<string, unknown>;
+}
+
+export interface Measurement {
+  id: string;
+  gender: Gender;
+  values: Record<string, unknown>;
+}
+
+// --- Fonctionnalités (feature flags) ---------------------------------
+
+export interface Features {
+  catalog_enabled: boolean;
+}
+
+// --- Catalogue (optionnel, activé par tenant) ------------------------
+
+export interface ProductImage {
+  id: string;
+  url: string;
+}
+
+/** Le champ attributes est un JSON libre : {"gender":"femme","sizes":["S","M"]}
+ * pour la couture, {"brand":"...","weight_kg":1.5} pour un commerce général,
+ * {"download_url":"...","license":"perso"} pour un produit numérique, etc. */
+export interface Product {
+  id: string;
+  name: string;
+  description?: string;
+  price: number;
+  category?: string;
+  sku?: string;
+  stock_quantity?: number | null;
+  attributes?: Record<string, unknown> | null;
+  is_featured: boolean;
+  is_active: boolean;
+  images?: ProductImage[];
+}
+
+export interface CreateProductInput {
+  name: string;
+  description?: string;
+  price: number;
+  category?: string;
+  sku?: string;
+  stock_quantity?: number | null;
+  attributes?: Record<string, unknown>;
+  is_featured?: boolean;
+}
+
+export interface ProductListFilter {
+  category?: string;
+  sort?: "price_asc" | "price_desc" | "newest" | "featured";
+}
+
+export interface Fabric {
+  id: string;
+  name: string;
+  description?: string;
+  extra_price: number;
+  image_url?: string;
+  is_active: boolean;
+}
+
+export interface CreateFabricInput {
+  name: string;
+  description?: string;
+  extra_price: number;
+  image_url?: string;
+}
+
+export type GalleryCategory = "femme" | "homme" | "sur_mesure" | "artisanat";
+
+export interface GalleryPhoto {
+  id: string;
+  image_url: string;
+  category?: GalleryCategory | string;
+  caption?: string;
+}
+
+export interface AddGalleryPhotoInput {
+  image_url: string;
+  category?: GalleryCategory | string;
+  caption?: string;
+}
+
+export interface CartItem {
+  id: string;
+  product_id: string;
+  fabric_id?: string;
+  size?: string;
+  color?: string;
+  quantity: number;
+}
+
+export interface AddCartItemInput {
+  cart_token?: string;
+  product_id: string;
+  fabric_id?: string;
+  size?: string;
+  color?: string;
+  quantity: number;
+}
+
+export interface AddCartItemResult {
+  cart_token: string;
+  item: CartItem;
+}
+
+export interface Review {
+  id: string;
+  order_id?: string;
+  customer_id?: string;
+  rating: number;
+  comment?: string;
+  photo_urls?: string[] | null;
+  is_published: boolean;
+}
+
+export interface CreateReviewInput {
+  order_id?: string;
+  customer_id?: string;
+  rating: number;
+  comment?: string;
+  photo_urls?: string[];
 }
 
 export interface UploadedImage {
@@ -189,6 +357,63 @@ export function createOrder(
   });
 }
 
+/** GET /orders/{id} — détail d'une commande. */
+export function getOrder(apiKey: string, orderId: string): Promise<Order> {
+  return request<Order>(`/orders/${orderId}`, apiKey, { method: "GET" });
+}
+
+/** PATCH /orders/{id} — modifie adresse/mesures/notes tant que la
+ * commande est encore éditable (pending/confirmed). */
+export function updateOrder(
+  apiKey: string,
+  orderId: string,
+  input: UpdateOrderInput
+): Promise<Order> {
+  return request<Order>(`/orders/${orderId}`, apiKey, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+/** GET /orders/{id}/history — historique des statuts d'une commande. */
+export function getOrderHistory(
+  apiKey: string,
+  orderId: string
+): Promise<OrderStatusEvent[]> {
+  return request<OrderStatusEvent[]>(`/orders/${orderId}/history`, apiKey, {
+    method: "GET",
+  });
+}
+
+/** POST /custom-orders — commande sur-mesure (tissu, mesures, adresse...). */
+export function createCustomOrder(
+  apiKey: string,
+  input: CreateCustomOrderInput
+): Promise<Order> {
+  return request<Order>("/custom-orders", apiKey, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+/** POST /measurements — enregistre un jeu de mesures pour un client. */
+export function saveMeasurements(
+  apiKey: string,
+  input: SaveMeasurementsInput
+): Promise<Measurement> {
+  return request<Measurement>("/measurements", apiKey, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+// --- Fonctionnalités --------------------------------------------------
+
+/** GET /features — indique si le catalogue est activé pour ce tenant. */
+export function getFeatures(apiKey: string): Promise<Features> {
+  return request<Features>("/features", apiKey, { method: "GET" });
+}
+
 /** POST /uploads/image — envoie une image (multipart/form-data). */
 export function uploadImage(
   apiKey: string,
@@ -221,6 +446,156 @@ export function sendEmail(
   return request<void>("/notifications/email", apiKey, {
     method: "POST",
     body: JSON.stringify(input),
+  });
+}
+
+// --- Catalogue (produits) ---------------------------------------------
+
+/** GET /products — liste les produits du tenant (si catalogue activé). */
+export function listProducts(
+  apiKey: string,
+  filter?: ProductListFilter
+): Promise<Product[]> {
+  const params = new URLSearchParams();
+  if (filter?.category) params.set("category", filter.category);
+  if (filter?.sort) params.set("sort", filter.sort);
+  const qs = params.toString();
+  return request<Product[]>(`/products${qs ? `?${qs}` : ""}`, apiKey, {
+    method: "GET",
+  });
+}
+
+/** POST /products — crée un produit. */
+export function createProduct(
+  apiKey: string,
+  input: CreateProductInput
+): Promise<Product> {
+  return request<Product>("/products", apiKey, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+/** GET /products/{id} — détail d'un produit (avec ses images). */
+export function getProduct(apiKey: string, productId: string): Promise<Product> {
+  return request<Product>(`/products/${productId}`, apiKey, { method: "GET" });
+}
+
+// --- Catalogue (tissus) -------------------------------------------------
+
+/** GET /fabrics — liste les tissus du tenant. */
+export function listFabrics(apiKey: string): Promise<Fabric[]> {
+  return request<Fabric[]>("/fabrics", apiKey, { method: "GET" });
+}
+
+/** POST /fabrics — crée un tissu. */
+export function createFabric(
+  apiKey: string,
+  input: CreateFabricInput
+): Promise<Fabric> {
+  return request<Fabric>("/fabrics", apiKey, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+/** POST /fabrics/upload — envoie la photo d'un tissu (multipart), renvoie son URL. */
+export function uploadFabricPhoto(
+  apiKey: string,
+  file: File
+): Promise<{ url: string }> {
+  const form = new FormData();
+  form.append("image", file);
+  return request<{ url: string }>("/fabrics/upload", apiKey, {
+    method: "POST",
+    body: form,
+  });
+}
+
+// --- Catalogue (galerie de réalisations) --------------------------------
+
+/** GET /gallery — liste les photos de réalisations, filtrable par catégorie. */
+export function listGalleryPhotos(
+  apiKey: string,
+  category?: string
+): Promise<GalleryPhoto[]> {
+  const qs = category ? `?category=${encodeURIComponent(category)}` : "";
+  return request<GalleryPhoto[]>(`/gallery${qs}`, apiKey, { method: "GET" });
+}
+
+/** POST /gallery — ajoute une photo de réalisation à la galerie. */
+export function addGalleryPhoto(
+  apiKey: string,
+  input: AddGalleryPhotoInput
+): Promise<GalleryPhoto> {
+  return request<GalleryPhoto>("/gallery", apiKey, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+// --- Catalogue (panier) --------------------------------------------------
+
+/** GET /cart?cart_token=... — contenu du panier associé à ce jeton. */
+export function getCart(apiKey: string, cartToken: string): Promise<CartItem[]> {
+  return request<CartItem[]>(
+    `/cart?cart_token=${encodeURIComponent(cartToken)}`,
+    apiKey,
+    { method: "GET" }
+  );
+}
+
+/** POST /cart — ajoute un article au panier (crée un jeton si absent). */
+export function addCartItem(
+  apiKey: string,
+  input: AddCartItemInput
+): Promise<AddCartItemResult> {
+  return request<AddCartItemResult>("/cart", apiKey, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+/** DELETE /cart/{itemID}?cart_token=... — retire un article du panier. */
+export function removeCartItem(
+  apiKey: string,
+  itemId: string,
+  cartToken: string
+): Promise<void> {
+  return request<void>(
+    `/cart/${itemId}?cart_token=${encodeURIComponent(cartToken)}`,
+    apiKey,
+    { method: "DELETE" }
+  );
+}
+
+// --- Catalogue (avis clients) --------------------------------------------
+
+/** POST /reviews — enregistre un avis (non publié tant qu'il n'est pas modéré). */
+export function createReview(
+  apiKey: string,
+  input: CreateReviewInput
+): Promise<Review> {
+  return request<Review>("/reviews", apiKey, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+/** GET /reviews — liste les avis déjà publiés. */
+export function listPublishedReviews(apiKey: string): Promise<Review[]> {
+  return request<Review[]>("/reviews", apiKey, { method: "GET" });
+}
+
+/** GET /reviews/pending — liste les avis en attente de modération. */
+export function listPendingReviews(apiKey: string): Promise<Review[]> {
+  return request<Review[]>("/reviews/pending", apiKey, { method: "GET" });
+}
+
+/** POST /reviews/{id}/publish — publie un avis en attente. */
+export function publishReview(apiKey: string, reviewId: string): Promise<void> {
+  return request<void>(`/reviews/${reviewId}/publish`, apiKey, {
+    method: "POST",
   });
 }
 

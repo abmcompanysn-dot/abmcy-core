@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth-context";
+import { FeaturesProvider } from "@/lib/features-context";
 import { AuthGate } from "@/components/AuthGate";
 import { NavBar } from "@/components/NavBar";
 
@@ -28,12 +29,14 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="min-h-full flex flex-col bg-slate-50">
         <AuthProvider>
-          <NavBar />
-          <AuthGate>
-            <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-8">
-              {children}
-            </main>
-          </AuthGate>
+          <FeaturesProvider>
+            <NavBar />
+            <AuthGate>
+              <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-8">
+                {children}
+              </main>
+            </AuthGate>
+          </FeaturesProvider>
         </AuthProvider>
       </body>
     </html>
