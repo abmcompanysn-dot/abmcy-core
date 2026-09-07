@@ -6,7 +6,9 @@ import (
 	"strings"
 
 	"github.com/abmcy/core/internal/auth"
+	"github.com/abmcy/core/internal/catalog"
 	"github.com/abmcy/core/internal/db"
+	"github.com/abmcy/core/internal/features"
 	authmw "github.com/abmcy/core/internal/middleware"
 	"github.com/abmcy/core/internal/notification"
 	"github.com/abmcy/core/internal/order"
@@ -15,6 +17,7 @@ import (
 	"github.com/abmcy/core/internal/storage"
 	"github.com/abmcy/core/internal/tenant"
 	"github.com/abmcy/core/internal/traffic"
+	"github.com/abmcy/core/pkg/response"
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
 	"github.com/google/uuid"
@@ -32,6 +35,15 @@ type Server struct {
 	notifications *notification.Service
 	config        *platformconfig.Service
 	traffic       *traffic.Service
+	features      *features.Service
+
+	products     *catalog.ProductService
+	fabrics      *catalog.FabricService
+	customers    *catalog.CustomerService
+	measurements *catalog.MeasurementService
+	cart         *catalog.CartService
+	gallery      *catalog.GalleryService
+	reviews      *catalog.ReviewService
 
 	publicBaseURL string
 	corsOrigins   []string
@@ -48,6 +60,14 @@ type Deps struct {
 	Notifications *notification.Service
 	Config        *platformconfig.Service
 	Traffic       *traffic.Service
+	Features      *features.Service
+	Products      *catalog.ProductService
+	Fabrics       *catalog.FabricService
+	Customers     *catalog.CustomerService
+	Measurements  *catalog.MeasurementService
+	Cart          *catalog.CartService
+	Gallery       *catalog.GalleryService
+	Reviews       *catalog.ReviewService
 	RateLimiter   *authmw.RateLimit
 	PublicBaseURL string
 	CorsOrigins   string
@@ -66,6 +86,14 @@ func New(d Deps) *Server {
 		notifications: d.Notifications,
 		config:        d.Config,
 		traffic:       d.Traffic,
+		features:      d.Features,
+		products:      d.Products,
+		fabrics:       d.Fabrics,
+		customers:     d.Customers,
+		measurements:  d.Measurements,
+		cart:          d.Cart,
+		gallery:       d.Gallery,
+		reviews:       d.Reviews,
 		publicBaseURL: d.PublicBaseURL,
 		corsOrigins:   strings.Split(d.CorsOrigins, ","),
 		adminAPIKey:   d.AdminAPIKey,
@@ -96,11 +124,45 @@ func (s *Server) routes(rl *authmw.RateLimit) {
 			r.Use(rl.Middleware)
 		}
 
+		r.Get("/features", s.handleGetFeatures)
+
 		r.Post("/orders", s.handleCreateOrder)
 		r.Get("/orders", s.handleListOrders)
+		r.Get("/orders/{orderID}", s.handleGetOrder)
+		r.Patch("/orders/{orderID}", s.handleUpdateOrder)
+		r.Get("/orders/{orderID}/history", s.handleOrderHistory)
+		r.Post("/custom-orders", s.handleCreateCustomOrder)
+		r.Post("/measurements", s.handleSaveMeasurements)
 		r.Post("/uploads/image", s.handleUploadImage)
 		r.Post("/payments/init", s.handleInitPayment)
 		r.Post("/notifications/email", s.handleSendEmail)
+
+		// Service catalogue — opt-in par tenant (voir internal/features).
+		// Un tenant sans le catalogue activé reçoit un 403 clair sur
+		// toutes ces routes plutôt qu'un comportement à moitié fonctionnel.
+		r.Group(func(r chi.Router) {
+			r.Use(s.requireCatalog)
+
+			r.Get("/products", s.handleListProducts)
+			r.Post("/products", s.handleCreateProduct)
+			r.Get("/products/{productID}", s.handleGetProduct)
+
+			r.Get("/fabrics", s.handleListFabrics)
+			r.Post("/fabrics", s.handleCreateFabric)
+			r.Post("/fabrics/upload", s.handleUploadFabricPhoto)
+
+			r.Get("/gallery", s.handleListGallery)
+			r.Post("/gallery", s.handleAddGalleryPhoto)
+
+			r.Get("/cart", s.handleGetCart)
+			r.Post("/cart", s.handleAddCartItem)
+			r.Delete("/cart/{itemID}", s.handleRemoveCartItem)
+
+			r.Post("/reviews", s.handleCreateReview)
+			r.Get("/reviews", s.handleListPublishedReviews)
+			r.Get("/reviews/pending", s.handleListPendingReviews)
+			r.Post("/reviews/{reviewID}/publish", s.handlePublishReview)
+		})
 	})
 
 	// Super-admin API — separate static key, used only by ad.abmcy.com's
@@ -110,12 +172,25 @@ func (s *Server) routes(rl *authmw.RateLimit) {
 		r.Get("/admin/tenants", s.handleAdminListTenants)
 		r.Post("/admin/tenants", s.handleAdminCreateTenant)
 		r.Put("/admin/tenants/{tenantID}/rate-limit", s.handleAdminUpdateRateLimit)
+		r.Get("/admin/tenants/{tenantID}/features", s.handleAdminGetFeatures)
+		r.Put("/admin/tenants/{tenantID}/features", s.handleAdminUpdateFeatures)
 
 		r.Get("/admin/config", s.handleAdminGetConfig)
 		r.Put("/admin/config/{key}", s.handleAdminSetConfig)
 
 		r.Get("/admin/traffic", s.handleAdminTrafficSummary)
 		r.Get("/admin/traffic/{tenantID}", s.handleAdminTrafficDetail)
+	})
+}
+
+func (s *Server) requireCatalog(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t, _ := authmw.TenantFromContext(r.Context())
+		if err := s.features.RequireCatalog(r.Context(), t.ID); err != nil {
+			response.Err(w, err)
+			return
+		}
+		next.ServeHTTP(w, r)
 	})
 }
 

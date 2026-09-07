@@ -22,8 +22,10 @@ import (
 	"time"
 
 	"github.com/abmcy/core/internal/auth"
+	"github.com/abmcy/core/internal/catalog"
 	"github.com/abmcy/core/internal/config"
 	"github.com/abmcy/core/internal/db"
+	"github.com/abmcy/core/internal/features"
 	"github.com/abmcy/core/internal/httpserver"
 	authmw "github.com/abmcy/core/internal/middleware"
 	"github.com/abmcy/core/internal/notification"
@@ -73,6 +75,17 @@ func main() {
 	payments := payment.NewService(pool, platformCfg, orders)
 	notifications := notification.NewService(pool, platformCfg)
 	trafficSvc := traffic.NewService(pool)
+	featuresSvc := features.NewService(pool)
+
+	// Catalogue optionnel (activé par tenant via internal/features) :
+	// produits, tissus, clients, mesures, panier, galerie, avis.
+	products := catalog.NewProductService(pool)
+	fabrics := catalog.NewFabricService(pool)
+	customers := catalog.NewCustomerService(pool)
+	measurements := catalog.NewMeasurementService(pool)
+	cart := catalog.NewCartService(pool)
+	gallery := catalog.NewGalleryService(pool)
+	reviews := catalog.NewReviewService(pool)
 
 	rateLimiter := authmw.NewRateLimit(5, 20) // repli par défaut si un tenant n'a pas ses propres limites
 
@@ -86,6 +99,14 @@ func main() {
 		Notifications: notifications,
 		Config:        platformCfg,
 		Traffic:       trafficSvc,
+		Features:      featuresSvc,
+		Products:      products,
+		Fabrics:       fabrics,
+		Customers:     customers,
+		Measurements:  measurements,
+		Cart:          cart,
+		Gallery:       gallery,
+		Reviews:       reviews,
 		RateLimiter:   rateLimiter,
 		PublicBaseURL: "https://api.abmcy.com",
 		CorsOrigins:   cfg.CorsOrigins,

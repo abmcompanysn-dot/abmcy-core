@@ -107,7 +107,7 @@ func (s *Service) HandleWebhook(ctx context.Context, tenantID uuid.UUID, transac
 	}
 
 	if newStatus == "success" {
-		return s.orders.UpdateStatus(ctx, tenantID, orderID, "paid")
+		return s.orders.UpdateStatus(ctx, tenantID, orderID, "paid", "Paiement confirmé par CinetPay")
 	}
 	return nil
 }

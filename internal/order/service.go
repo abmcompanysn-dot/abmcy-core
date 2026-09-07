@@ -12,23 +12,35 @@ import (
 )
 
 type Order struct {
-	ID            uuid.UUID       `json:"id"`
-	OrderNumber   string          `json:"order_number"`
-	CustomerName  string          `json:"customer_name"`
-	CustomerPhone string          `json:"customer_phone"`
-	CustomerEmail string          `json:"customer_email,omitempty"`
-	TotalAmount   int             `json:"total_amount"`
-	Status        string          `json:"status"`
-	Measurements  json.RawMessage `json:"measurements,omitempty"`
-	CreatedAt     time.Time       `json:"created_at"`
+	ID              uuid.UUID       `json:"id"`
+	OrderNumber     string          `json:"order_number"`
+	CustomerID      *uuid.UUID      `json:"customer_id,omitempty"`
+	CustomerName    string          `json:"customer_name"`
+	CustomerPhone   string          `json:"customer_phone"`
+	CustomerEmail   string          `json:"customer_email,omitempty"`
+	ShippingAddress string          `json:"shipping_address,omitempty"`
+	TotalAmount     int             `json:"total_amount"`
+	Status          string          `json:"status"`
+	Measurements    json.RawMessage `json:"measurements,omitempty"`
+	MeasurementsID  *uuid.UUID      `json:"measurements_id,omitempty"`
+	FabricID        *uuid.UUID      `json:"fabric_id,omitempty"`
+	FabricSource    string          `json:"fabric_source,omitempty"` // maison | envoi_photo | conseil_atelier
+	Notes           string          `json:"notes,omitempty"`
+	CreatedAt       time.Time       `json:"created_at"`
 }
 
 type CreateInput struct {
-	CustomerName  string
-	CustomerPhone string
-	CustomerEmail string
-	TotalAmount   int
-	Measurements  json.RawMessage
+	CustomerID      *uuid.UUID
+	CustomerName    string
+	CustomerPhone   string
+	CustomerEmail   string
+	ShippingAddress string
+	TotalAmount     int
+	Measurements    json.RawMessage
+	MeasurementsID  *uuid.UUID
+	FabricID        *uuid.UUID
+	FabricSource    string
+	Notes           string
 }
 
 type Service struct {
@@ -49,13 +61,24 @@ func (s *Service) Create(ctx context.Context, tenantID uuid.UUID, in CreateInput
 		orderNumber := fmt.Sprintf("ORD-%d", time.Now().UnixNano()%1_000_000_000)
 
 		row := tx.QueryRow(ctx, `
-			INSERT INTO orders (tenant_id, order_number, customer_name, customer_phone, customer_email, total_amount, measurements)
-			VALUES ($1, $2, $3, $4, $5, $6, $7)
-			RETURNING id, order_number, customer_name, customer_phone, coalesce(customer_email, ''), total_amount, status, measurements, created_at
-		`, tenantID, orderNumber, in.CustomerName, in.CustomerPhone, in.CustomerEmail, in.TotalAmount, in.Measurements)
+			INSERT INTO orders (tenant_id, order_number, customer_id, customer_name, customer_phone, customer_email,
+				shipping_address, total_amount, measurements, measurements_id, fabric_id, fabric_source, notes)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+			RETURNING id, order_number, customer_id, customer_name, customer_phone, coalesce(customer_email, ''),
+				coalesce(shipping_address, ''), total_amount, status, measurements, measurements_id, fabric_id,
+				coalesce(fabric_source, ''), coalesce(notes, ''), created_at
+		`, tenantID, orderNumber, in.CustomerID, in.CustomerName, in.CustomerPhone, in.CustomerEmail,
+			in.ShippingAddress, in.TotalAmount, in.Measurements, in.MeasurementsID, in.FabricID, in.FabricSource, in.Notes)
 
-		return row.Scan(&o.ID, &o.OrderNumber, &o.CustomerName, &o.CustomerPhone, &o.CustomerEmail,
-			&o.TotalAmount, &o.Status, &o.Measurements, &o.CreatedAt)
+		if err := row.Scan(&o.ID, &o.OrderNumber, &o.CustomerID, &o.CustomerName, &o.CustomerPhone, &o.CustomerEmail,
+			&o.ShippingAddress, &o.TotalAmount, &o.Status, &o.Measurements, &o.MeasurementsID, &o.FabricID,
+			&o.FabricSource, &o.Notes, &o.CreatedAt); err != nil {
+			return err
+		}
+
+		_, err := tx.Exec(ctx, `INSERT INTO order_status_history (tenant_id, order_id, status) VALUES ($1, $2, $3)`,
+			tenantID, o.ID, o.Status)
+		return err
 	})
 	if err != nil {
 		return nil, fmt.Errorf("order: create: %w", err)
@@ -67,7 +90,9 @@ func (s *Service) List(ctx context.Context, tenantID uuid.UUID) ([]Order, error)
 	var orders []Order
 	err := s.pool.WithTenant(ctx, tenantID, func(ctx context.Context, tx db.TxLike) error {
 		rows, err := tx.Query(ctx, `
-			SELECT id, order_number, customer_name, customer_phone, coalesce(customer_email, ''), total_amount, status, measurements, created_at
+			SELECT id, order_number, customer_id, customer_name, customer_phone, coalesce(customer_email, ''),
+				coalesce(shipping_address, ''), total_amount, status, measurements, measurements_id, fabric_id,
+				coalesce(fabric_source, ''), coalesce(notes, ''), created_at
 			FROM orders ORDER BY created_at DESC LIMIT 200
 		`)
 		if err != nil {
@@ -76,8 +101,9 @@ func (s *Service) List(ctx context.Context, tenantID uuid.UUID) ([]Order, error)
 		defer rows.Close()
 		for rows.Next() {
 			var o Order
-			if err := rows.Scan(&o.ID, &o.OrderNumber, &o.CustomerName, &o.CustomerPhone, &o.CustomerEmail,
-				&o.TotalAmount, &o.Status, &o.Measurements, &o.CreatedAt); err != nil {
+			if err := rows.Scan(&o.ID, &o.OrderNumber, &o.CustomerID, &o.CustomerName, &o.CustomerPhone, &o.CustomerEmail,
+				&o.ShippingAddress, &o.TotalAmount, &o.Status, &o.Measurements, &o.MeasurementsID, &o.FabricID,
+				&o.FabricSource, &o.Notes, &o.CreatedAt); err != nil {
 				return err
 			}
 			orders = append(orders, o)
@@ -87,9 +113,61 @@ func (s *Service) List(ctx context.Context, tenantID uuid.UUID) ([]Order, error)
 	return orders, err
 }
 
-// UpdateStatus transitions an order (e.g. pending -> paid), called by
-// the payment service webhook handler once CinetPay/Stripe confirms.
-func (s *Service) UpdateStatus(ctx context.Context, tenantID, orderID uuid.UUID, status string) error {
+func (s *Service) Get(ctx context.Context, tenantID, orderID uuid.UUID) (*Order, error) {
+	var o Order
+	err := s.pool.WithTenant(ctx, tenantID, func(ctx context.Context, tx db.TxLike) error {
+		row := tx.QueryRow(ctx, `
+			SELECT id, order_number, customer_id, customer_name, customer_phone, coalesce(customer_email, ''),
+				coalesce(shipping_address, ''), total_amount, status, measurements, measurements_id, fabric_id,
+				coalesce(fabric_source, ''), coalesce(notes, ''), created_at
+			FROM orders WHERE id = $1
+		`, orderID)
+		return row.Scan(&o.ID, &o.OrderNumber, &o.CustomerID, &o.CustomerName, &o.CustomerPhone, &o.CustomerEmail,
+			&o.ShippingAddress, &o.TotalAmount, &o.Status, &o.Measurements, &o.MeasurementsID, &o.FabricID,
+			&o.FabricSource, &o.Notes, &o.CreatedAt)
+	})
+	if err != nil {
+		return nil, apierror.ErrNotFound
+	}
+	return &o, nil
+}
+
+// UpdateInput carries the fields a tenant can still change before an
+// order is validated (paid) — address, measurements, a comment.
+type UpdateInput struct {
+	ShippingAddress *string
+	Measurements    json.RawMessage
+	Notes           *string
+}
+
+func (s *Service) Update(ctx context.Context, tenantID, orderID uuid.UUID, in UpdateInput) (*Order, error) {
+	var o Order
+	err := s.pool.WithTenant(ctx, tenantID, func(ctx context.Context, tx db.TxLike) error {
+		row := tx.QueryRow(ctx, `
+			UPDATE orders SET
+				shipping_address = coalesce($1, shipping_address),
+				measurements = coalesce($2, measurements),
+				notes = coalesce($3, notes),
+				updated_at = now()
+			WHERE id = $4 AND status IN ('pending', 'confirmed')
+			RETURNING id, order_number, customer_id, customer_name, customer_phone, coalesce(customer_email, ''),
+				coalesce(shipping_address, ''), total_amount, status, measurements, measurements_id, fabric_id,
+				coalesce(fabric_source, ''), coalesce(notes, ''), created_at
+		`, in.ShippingAddress, in.Measurements, in.Notes, orderID)
+		return row.Scan(&o.ID, &o.OrderNumber, &o.CustomerID, &o.CustomerName, &o.CustomerPhone, &o.CustomerEmail,
+			&o.ShippingAddress, &o.TotalAmount, &o.Status, &o.Measurements, &o.MeasurementsID, &o.FabricID,
+			&o.FabricSource, &o.Notes, &o.CreatedAt)
+	})
+	if err != nil {
+		return nil, apierror.New(409, "order_not_editable", "Cette commande ne peut plus être modifiée.")
+	}
+	return &o, nil
+}
+
+// UpdateStatus transitions an order (e.g. pending -> paid), called by the
+// payment webhook handler or the tenant dashboard. Every transition is
+// recorded in order_status_history so the client can see the update trail.
+func (s *Service) UpdateStatus(ctx context.Context, tenantID, orderID uuid.UUID, status string, comment string) error {
 	return s.pool.WithTenant(ctx, tenantID, func(ctx context.Context, tx db.TxLike) error {
 		tag, err := tx.Exec(ctx, `UPDATE orders SET status = $1, updated_at = now() WHERE id = $2`, status, orderID)
 		if err != nil {
@@ -98,6 +176,43 @@ func (s *Service) UpdateStatus(ctx context.Context, tenantID, orderID uuid.UUID,
 		if tag.RowsAffected() == 0 {
 			return apierror.ErrNotFound
 		}
-		return nil
+
+		_, err = tx.Exec(ctx, `INSERT INTO order_status_history (tenant_id, order_id, status, comment) VALUES ($1, $2, $3, nullif($4, ''))`,
+			tenantID, orderID, status, comment)
+		return err
 	})
+}
+
+type StatusEvent struct {
+	Status    string    `json:"status"`
+	Comment   string    `json:"comment,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// History returns an order's full status trail — "l'historique des mises
+// à jour" the client sees on their order detail view.
+func (s *Service) History(ctx context.Context, tenantID, orderID uuid.UUID) ([]StatusEvent, error) {
+	var events []StatusEvent
+	err := s.pool.WithTenant(ctx, tenantID, func(ctx context.Context, tx db.TxLike) error {
+		rows, err := tx.Query(ctx, `
+			SELECT status, coalesce(comment, ''), created_at FROM order_status_history
+			WHERE order_id = $1 ORDER BY created_at ASC
+		`, orderID)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var e StatusEvent
+			if err := rows.Scan(&e.Status, &e.Comment, &e.CreatedAt); err != nil {
+				return err
+			}
+			events = append(events, e)
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		return nil, fmt.Errorf("order: history: %w", err)
+	}
+	return events, nil
 }

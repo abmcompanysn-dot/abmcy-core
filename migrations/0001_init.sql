@@ -46,6 +46,19 @@ CREATE POLICY tenant_isolation_users ON users
     USING (tenant_id = current_setting('app.tenant_id', true)::uuid);
 
 -- ============================================================
+-- TENANT FEATURES (activation à la carte du service catalogue par tenant
+-- — un tenant qui vend déjà via WhatsApp/en boutique peut n'avoir besoin
+-- que des commandes sur-mesure, sans catalogue/panier/avis publics.
+-- Activé/désactivé depuis le dashboard super-admin. Table système, pas de
+-- RLS : gérée uniquement via WithSystem, comme platform_config).
+-- ============================================================
+CREATE TABLE tenant_features (
+    tenant_id       UUID PRIMARY KEY REFERENCES tenants(id) ON DELETE CASCADE,
+    catalog_enabled BOOLEAN NOT NULL DEFAULT FALSE, -- produits, tissus, panier, galerie, avis
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- ============================================================
 -- PRODUCTS / CATALOG
 -- ============================================================
 CREATE TABLE products (
@@ -54,7 +67,11 @@ CREATE TABLE products (
     name        VARCHAR(150) NOT NULL,
     description TEXT,
     price       INT NOT NULL,           -- en FCFA
-    category    VARCHAR(100),
+    gender      VARCHAR(20),            -- femme | homme | unisexe
+    category    VARCHAR(100),           -- ex: robes, ensembles, prière
+    sizes       JSONB,                  -- ex: ["S","M","L","XL"]
+    colors      JSONB,                  -- ex: ["Bleu nuit","Blanc cassé"]
+    is_featured BOOLEAN NOT NULL DEFAULT FALSE, -- "meilleures ventes" / mise en avant
     is_active   BOOLEAN NOT NULL DEFAULT TRUE,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -65,6 +82,113 @@ CREATE POLICY tenant_isolation_products ON products
     USING (tenant_id = current_setting('app.tenant_id', true)::uuid);
 
 CREATE INDEX idx_products_tenant ON products(tenant_id);
+CREATE INDEX idx_products_tenant_active ON products(tenant_id, is_active);
+
+-- ============================================================
+-- FABRICS (galerie de tissus proposés par l'atelier — indépendante des
+-- product_images, qui restent pour les photos de produits finis)
+-- ============================================================
+CREATE TABLE fabrics (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id     UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    name          VARCHAR(150) NOT NULL,
+    description   TEXT,
+    extra_price   INT NOT NULL DEFAULT 0, -- supplément en FCFA
+    image_url     TEXT,
+    is_active     BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+ALTER TABLE fabrics ENABLE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation_fabrics ON fabrics
+    USING (tenant_id = current_setting('app.tenant_id', true)::uuid);
+
+CREATE INDEX idx_fabrics_tenant ON fabrics(tenant_id);
+
+-- ============================================================
+-- GALLERY PHOTOS (photos de réalisations, catégorisées : Femme, Homme,
+-- Sur mesure, Artisanat — distinctes des product_images qui sont liées à
+-- une fiche produit précise)
+-- ============================================================
+CREATE TABLE gallery_photos (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id   UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    image_url   TEXT NOT NULL,
+    category    VARCHAR(50), -- femme | homme | sur_mesure | artisanat
+    caption     VARCHAR(255),
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+ALTER TABLE gallery_photos ENABLE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation_gallery_photos ON gallery_photos
+    USING (tenant_id = current_setting('app.tenant_id', true)::uuid);
+
+CREATE INDEX idx_gallery_photos_tenant ON gallery_photos(tenant_id, category);
+
+-- ============================================================
+-- CUSTOMERS (profil client léger, identifié par téléphone — pas de
+-- compte/mot de passe : sert à rattacher mesures, panier et avis à la
+-- même personne sans exiger d'inscription)
+-- ============================================================
+CREATE TABLE customers (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id   UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    name        VARCHAR(100) NOT NULL,
+    phone       VARCHAR(20) NOT NULL,
+    email       VARCHAR(255),
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (tenant_id, phone)
+);
+
+ALTER TABLE customers ENABLE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation_customers ON customers
+    USING (tenant_id = current_setting('app.tenant_id', true)::uuid);
+
+CREATE INDEX idx_customers_tenant ON customers(tenant_id);
+
+-- ============================================================
+-- MEASUREMENTS (mesures sur-mesure d'un client, versionnées : un client
+-- peut reprendre ses mesures ; on garde l'historique plutôt que d'écraser)
+-- ============================================================
+CREATE TABLE measurements (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id   UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    customer_id UUID NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+    gender      VARCHAR(20) NOT NULL, -- femme | homme (détermine les champs attendus côté API)
+    measurement_values JSONB NOT NULL, -- ex femme: {poitrine, taille, hanches, epaules, manches, longueur}
+                                        -- ex homme: + pantalon
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+ALTER TABLE measurements ENABLE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation_measurements ON measurements
+    USING (tenant_id = current_setting('app.tenant_id', true)::uuid);
+
+CREATE INDEX idx_measurements_tenant_customer ON measurements(tenant_id, customer_id);
+
+-- ============================================================
+-- CART ITEMS (panier sauvegardé côté serveur, pas juste localStorage —
+-- identifié par un cart_token opaque généré côté client au premier ajout,
+-- pas de session serveur ni de compte requis)
+-- ============================================================
+CREATE TABLE cart_items (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id   UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    cart_token  VARCHAR(64) NOT NULL,
+    product_id  UUID NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+    fabric_id   UUID REFERENCES fabrics(id) ON DELETE SET NULL,
+    size        VARCHAR(20),
+    color       VARCHAR(50),
+    quantity    INT NOT NULL DEFAULT 1,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+ALTER TABLE cart_items ENABLE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation_cart_items ON cart_items
+    USING (tenant_id = current_setting('app.tenant_id', true)::uuid);
+
+CREATE INDEX idx_cart_items_tenant_token ON cart_items(tenant_id, cart_token);
 
 -- ============================================================
 -- PRODUCT IMAGES (uploadées sur Cloudflare R2, on garde juste l'URL + le poids)
@@ -85,20 +209,28 @@ CREATE POLICY tenant_isolation_product_images ON product_images
 CREATE INDEX idx_product_images_tenant ON product_images(tenant_id);
 
 -- ============================================================
--- ORDERS (commandes + mesures sur-mesure)
+-- ORDERS (commandes standards ET sur-mesure : les colonnes sur-mesure
+-- restent NULL pour une commande catalogue classique)
 -- ============================================================
 CREATE TABLE orders (
-    id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id      UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-    order_number   VARCHAR(50) NOT NULL,
-    customer_name  VARCHAR(100) NOT NULL,
-    customer_phone VARCHAR(20) NOT NULL,
-    customer_email VARCHAR(255),
-    total_amount   INT NOT NULL,          -- FCFA
-    status         VARCHAR(30) NOT NULL DEFAULT 'pending', -- pending|paid|in_progress|shipped|cancelled
-    measurements   JSONB,
-    created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id       UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    order_number    VARCHAR(50) NOT NULL,
+    customer_id     UUID REFERENCES customers(id) ON DELETE SET NULL,
+    customer_name   VARCHAR(100) NOT NULL,
+    customer_phone  VARCHAR(20) NOT NULL,
+    customer_email  VARCHAR(255),
+    shipping_address TEXT,
+    total_amount    INT NOT NULL,          -- FCFA (produits + tissu + livraison)
+    status          VARCHAR(30) NOT NULL DEFAULT 'pending',
+        -- pending|confirmed|paid|in_progress|shipped|delivered|cancelled
+    measurements    JSONB,                 -- snapshot au moment de la commande (voir aussi measurements.id ci-dessous)
+    measurements_id UUID REFERENCES measurements(id) ON DELETE SET NULL,
+    fabric_id       UUID REFERENCES fabrics(id) ON DELETE SET NULL,
+    fabric_source   VARCHAR(30),           -- maison | envoi_photo | conseil_atelier
+    notes           TEXT,                  -- commentaires particuliers du client
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (tenant_id, order_number)
 );
 
@@ -108,6 +240,47 @@ CREATE POLICY tenant_isolation_orders ON orders
 
 CREATE INDEX idx_orders_tenant ON orders(tenant_id);
 CREATE INDEX idx_orders_status ON orders(tenant_id, status);
+
+-- ============================================================
+-- ORDER STATUS HISTORY (traçabilité des changements de statut, affichée
+-- au client comme "historique des mises à jour" de sa commande)
+-- ============================================================
+CREATE TABLE order_status_history (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id   UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    order_id    UUID NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+    status      VARCHAR(30) NOT NULL,
+    comment     TEXT,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+ALTER TABLE order_status_history ENABLE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation_order_status_history ON order_status_history
+    USING (tenant_id = current_setting('app.tenant_id', true)::uuid);
+
+CREATE INDEX idx_order_status_history_order ON order_status_history(tenant_id, order_id, created_at);
+
+-- ============================================================
+-- REVIEWS (avis client après livraison, modérés par l'atelier avant
+-- publication — is_published reste FALSE jusqu'à validation manuelle)
+-- ============================================================
+CREATE TABLE reviews (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id   UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    order_id    UUID REFERENCES orders(id) ON DELETE SET NULL,
+    customer_id UUID REFERENCES customers(id) ON DELETE SET NULL,
+    rating      SMALLINT NOT NULL CHECK (rating BETWEEN 1 AND 5),
+    comment     TEXT,
+    photo_urls  JSONB,               -- tableau d'URLs (uploadées via /uploads/image)
+    is_published BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+ALTER TABLE reviews ENABLE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation_reviews ON reviews
+    USING (tenant_id = current_setting('app.tenant_id', true)::uuid);
+
+CREATE INDEX idx_reviews_tenant_published ON reviews(tenant_id, is_published);
 
 -- ============================================================
 -- PAYMENTS (traces des transactions CinetPay / Stripe)

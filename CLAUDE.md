@@ -87,6 +87,22 @@ Domaines confirmés (2026-09-07) :
   (`GET /admin/traffic`, `/admin/traffic/{tenantID}`). Pas encore de purge
   automatique — `traffic.Service.PurgeOlderThan` existe mais n'est appelée
   par aucun job planifié pour l'instant.
+- **Service catalogue optionnel, opt-in par tenant** (décidé le 2026-09-07,
+  sur demande explicite — un tenant qui vend déjà via WhatsApp/en boutique
+  n'a pas forcément besoin d'un catalogue public). Table `tenant_features`
+  (`catalog_enabled`, défaut `false`), activée/désactivée depuis le
+  dashboard admin via `PUT /admin/tenants/{id}/features`. Toutes les
+  routes catalogue (`internal/catalog`) passent par le middleware
+  `requireCatalog` (voir `internal/httpserver/server.go`) qui renvoie un
+  403 clair (`catalog_not_enabled`) si le tenant n'a pas activé la
+  fonctionnalité. Le tenant peut vérifier son propre statut via
+  `GET /features`. Inspiré d'un exemple concret donné par l'utilisateur
+  pour HANI'S (produits, tissus, panier, mesures sur-mesure, galerie,
+  avis) — voir `internal/catalog/` : `products.go`, `fabrics.go`,
+  `customers.go` (+ `measurements`), `cart.go`, `gallery.go`, `reviews.go`.
+  `orders` a été étendu (customer_id, fabric_id/fabric_source,
+  shipping_address, notes, statuts enrichis) et `order_status_history`
+  ajouté pour tracer chaque changement de statut.
 
 ## État d'avancement
 
@@ -100,10 +116,18 @@ Domaines confirmés (2026-09-07) :
   - `GET /health`
   - `POST /auth/login`
   - `POST /webhooks/cinetpay/{tenantSlug}`
-  - Scopées `X-API-Key` : `POST/GET /orders`, `POST /uploads/image`,
+  - Scopées `X-API-Key` : `GET /features`, `POST/GET /orders`,
+    `GET/PATCH /orders/{id}`, `GET /orders/{id}/history`,
+    `POST /custom-orders`, `POST /measurements`, `POST /uploads/image`,
     `POST /payments/init`, `POST /notifications/email`
+  - Scopées `X-API-Key` + catalogue activé (`requireCatalog`) :
+    `GET/POST /products`, `GET /products/{id}`, `GET/POST /fabrics`,
+    `POST /fabrics/upload`, `GET/POST /gallery`, `GET/POST /cart`,
+    `DELETE /cart/{itemID}`, `POST /reviews`, `GET /reviews`,
+    `GET /reviews/pending`, `POST /reviews/{id}/publish`
   - Scopées `X-Admin-Key` : `GET/POST /admin/tenants`,
-    `PUT /admin/tenants/{id}/rate-limit`, `GET /admin/config`,
+    `PUT /admin/tenants/{id}/rate-limit`,
+    `GET/PUT /admin/tenants/{id}/features`, `GET /admin/config`,
     `PUT /admin/config/{key}`, `GET /admin/traffic`,
     `GET /admin/traffic/{tenantID}`
 - `admin-dashboard/` : build de production (`npm run build`) et lint
@@ -160,17 +184,20 @@ d'étape ni tout lancer en parallèle sans validation :
    (`admin-dashboard/app/services`, `admin-dashboard/app/trafic` +
    `/trafic/[tenantId]`, édition rate-limit dans TenantsTable) — build +
    lint confirmés deux fois (agent puis vérification indépendante).
-4. **Authentification admin réelle** (comptes individuels login/mot de passe
-   au lieu de la clé `X-Admin-Key` statique partagée) — priorité suivante,
-   pas encore commencée.
-5. Monitoring + alertes de sécurité (email en cas d'anomalie : pics
+4. ~~Service catalogue optionnel (produits, tissus, panier, mesures,
+   galerie, avis), opt-in par tenant~~ — **priorité réordonnée en cours de
+   route par l'utilisateur (2026-09-07)**, passée devant l'auth admin.
+   Backend fait et vérifié (`go build`/`go vet` OK, YAML k8s régénéré).
+   **Le dashboard tenant (`tenant-dashboard/`) et le dashboard admin
+   (activation du catalogue par tenant) ne consomment pas encore ces
+   routes — à faire avant de considérer cette étape terminée.**
+5. **Authentification admin réelle** (comptes individuels login/mot de passe
+   au lieu de la clé `X-Admin-Key` statique partagée) — pas encore
+   commencée.
+6. Monitoring + alertes de sécurité (email en cas d'anomalie : pics
    d'erreurs, échecs de connexion répétés, quota dépassé) — pas commencé.
-6. Sitemap XML (référencement `landing/`) + flux XML produits par tenant
+7. Sitemap XML (référencement `landing/`) + flux XML produits par tenant
    (type Google Shopping) — pas commencé.
-7. Implémenter `internal/catalog/` (produits/collections) si le dashboard
-   tenant doit vraiment gérer un catalogue (actuellement il ne gère que
-   commandes + photos brutes) — pas explicitement priorisé par l'utilisateur,
-   à confirmer avant de s'y lancer.
 8. Déploiement réel : k3s sur le VPS + vraies clés + DNS (4 sous-domaines
    `.abmcy.com` à pointer : `api`, `ad`, `dash`, `core`).
 

@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/abmcy/core/internal/catalog"
 	authmw "github.com/abmcy/core/internal/middleware"
 	"github.com/abmcy/core/internal/order"
 	"github.com/abmcy/core/internal/platformconfig"
@@ -58,6 +59,158 @@ func (s *Server) handleListOrders(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	response.JSON(w, http.StatusOK, orders)
+}
+
+func (s *Server) handleGetOrder(w http.ResponseWriter, r *http.Request) {
+	t, _ := authmw.TenantFromContext(r.Context())
+	orderID, err := parseUUID(chi.URLParam(r, "orderID"))
+	if err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+
+	o, err := s.orders.Get(r.Context(), t.ID, orderID)
+	if err != nil {
+		response.Err(w, err)
+		return
+	}
+	response.JSON(w, http.StatusOK, o)
+}
+
+func (s *Server) handleUpdateOrder(w http.ResponseWriter, r *http.Request) {
+	t, _ := authmw.TenantFromContext(r.Context())
+	orderID, err := parseUUID(chi.URLParam(r, "orderID"))
+	if err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+
+	var body struct {
+		ShippingAddress *string         `json:"shipping_address"`
+		Measurements    json.RawMessage `json:"measurements"`
+		Notes           *string         `json:"notes"`
+	}
+	if err := decodeJSON(r, &body); err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+
+	o, err := s.orders.Update(r.Context(), t.ID, orderID, order.UpdateInput{
+		ShippingAddress: body.ShippingAddress,
+		Measurements:    body.Measurements,
+		Notes:           body.Notes,
+	})
+	if err != nil {
+		response.Err(w, err)
+		return
+	}
+	response.JSON(w, http.StatusOK, o)
+}
+
+func (s *Server) handleOrderHistory(w http.ResponseWriter, r *http.Request) {
+	t, _ := authmw.TenantFromContext(r.Context())
+	orderID, err := parseUUID(chi.URLParam(r, "orderID"))
+	if err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+
+	history, err := s.orders.History(r.Context(), t.ID, orderID)
+	if err != nil {
+		response.Err(w, err)
+		return
+	}
+	response.JSON(w, http.StatusOK, history)
+}
+
+// handleCreateCustomOrder is the sur-mesure entry point: customer info,
+// transmitted measurements, chosen fabric (or how the client will supply
+// it), and any particular comments — everything a POST /orders doesn't
+// carry on its own.
+func (s *Server) handleCreateCustomOrder(w http.ResponseWriter, r *http.Request) {
+	t, _ := authmw.TenantFromContext(r.Context())
+
+	var body struct {
+		CustomerName    string          `json:"customer_name"`
+		CustomerPhone   string          `json:"customer_phone"`
+		CustomerEmail   string          `json:"customer_email"`
+		ShippingAddress string          `json:"shipping_address"`
+		TotalAmount     int             `json:"total_amount"`
+		Measurements    json.RawMessage `json:"measurements"`
+		FabricID        *string         `json:"fabric_id"`
+		FabricSource    string          `json:"fabric_source"` // maison | envoi_photo | conseil_atelier
+		Notes           string          `json:"notes"`
+	}
+	if err := decodeJSON(r, &body); err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+
+	customer, err := s.customers.FindOrCreate(r.Context(), t.ID, body.CustomerName, body.CustomerPhone, body.CustomerEmail)
+	if err != nil {
+		response.Err(w, err)
+		return
+	}
+
+	var fabricID *uuid.UUID
+	if body.FabricID != nil && *body.FabricID != "" {
+		id, err := parseUUID(*body.FabricID)
+		if err != nil {
+			response.Err(w, apierror.ErrValidation)
+			return
+		}
+		fabricID = &id
+	}
+
+	o, err := s.orders.Create(r.Context(), t.ID, order.CreateInput{
+		CustomerID:      &customer.ID,
+		CustomerName:    body.CustomerName,
+		CustomerPhone:   body.CustomerPhone,
+		CustomerEmail:   body.CustomerEmail,
+		ShippingAddress: body.ShippingAddress,
+		TotalAmount:     body.TotalAmount,
+		Measurements:    body.Measurements,
+		FabricID:        fabricID,
+		FabricSource:    body.FabricSource,
+		Notes:           body.Notes,
+	})
+	if err != nil {
+		response.Err(w, err)
+		return
+	}
+	response.JSON(w, http.StatusCreated, o)
+}
+
+func (s *Server) handleSaveMeasurements(w http.ResponseWriter, r *http.Request) {
+	t, _ := authmw.TenantFromContext(r.Context())
+
+	var body struct {
+		CustomerName  string          `json:"customer_name"`
+		CustomerPhone string          `json:"customer_phone"`
+		Gender        string          `json:"gender"`
+		Values        json.RawMessage `json:"values"`
+	}
+	if err := decodeJSON(r, &body); err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+
+	customer, err := s.customers.FindOrCreate(r.Context(), t.ID, body.CustomerName, body.CustomerPhone, "")
+	if err != nil {
+		response.Err(w, err)
+		return
+	}
+
+	m, err := s.measurements.Save(r.Context(), t.ID, catalog.SaveMeasurementInput{
+		CustomerID: customer.ID,
+		Gender:     body.Gender,
+		Values:     body.Values,
+	})
+	if err != nil {
+		response.Err(w, err)
+		return
+	}
+	response.JSON(w, http.StatusCreated, m)
 }
 
 // --- Storage / R2 uploads -----------------------------------------
@@ -257,6 +410,59 @@ func (s *Server) handleAdminUpdateRateLimit(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleAdminUpdateFeatures toggles opt-in tenant capabilities — right now
+// just the storefront catalog (products, fabrics, cart, gallery, reviews).
+// A tenant selling entirely over WhatsApp/in-store can stay without it;
+// ABMCY enables it per tenant from the dashboard once they're ready for it.
+func (s *Server) handleAdminUpdateFeatures(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := parseUUID(chi.URLParam(r, "tenantID"))
+	if err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+
+	var body struct {
+		CatalogEnabled bool `json:"catalog_enabled"`
+	}
+	if err := decodeJSON(r, &body); err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+
+	if err := s.features.SetCatalogEnabled(r.Context(), tenantID, body.CatalogEnabled); err != nil {
+		response.Err(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleAdminGetFeatures(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := parseUUID(chi.URLParam(r, "tenantID"))
+	if err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+
+	flags, err := s.features.Get(r.Context(), tenantID)
+	if err != nil {
+		response.Err(w, err)
+		return
+	}
+	response.JSON(w, http.StatusOK, flags)
+}
+
+// handleGetFeatures lets a tenant's own dashboard know whether the
+// catalog is enabled for them, without needing admin access.
+func (s *Server) handleGetFeatures(w http.ResponseWriter, r *http.Request) {
+	t, _ := authmw.TenantFromContext(r.Context())
+	flags, err := s.features.Get(r.Context(), t.ID)
+	if err != nil {
+		response.Err(w, err)
+		return
+	}
+	response.JSON(w, http.StatusOK, flags)
 }
 
 // --- Super-admin (platform configuration: R2, Resend, CinetPay) ---------
