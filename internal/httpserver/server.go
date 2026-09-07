@@ -114,6 +114,7 @@ func (s *Server) routes(rl *authmw.RateLimit) {
 
 	r.Get("/health", s.handleHealth)
 	r.Post("/auth/login", s.handleLogin)
+	r.Post("/admin/auth/login", s.handleAdminLogin)
 	r.Post("/webhooks/cinetpay/{tenantSlug}", s.handleCinetPayWebhook)
 
 	// Tenant-scoped API — requires X-API-Key, used by dash.abmcy.com clients.
@@ -169,6 +170,11 @@ func (s *Server) routes(rl *authmw.RateLimit) {
 	// own admin dashboard, never exposed to tenants.
 	r.Group(func(r chi.Router) {
 		r.Use(s.adminAuth)
+
+		r.Get("/admin/accounts", s.handleAdminListAccounts)
+		r.Post("/admin/accounts", s.handleAdminCreateAccount)
+		r.Put("/admin/accounts/{userID}/active", s.handleAdminSetAccountActive)
+
 		r.Get("/admin/tenants", s.handleAdminListTenants)
 		r.Post("/admin/tenants", s.handleAdminCreateTenant)
 		r.Put("/admin/tenants/{tenantID}/rate-limit", s.handleAdminUpdateRateLimit)
@@ -195,14 +201,28 @@ func (s *Server) requireCatalog(next http.Handler) http.Handler {
 	})
 }
 
+// adminAuth accepts either a valid super-admin JWT (Authorization: Bearer
+// ..., issued by POST /admin/auth/login) or the static X-Admin-Key —
+// kept as a bootstrap fallback so a fresh deployment with no admin
+// account yet isn't locked out of the dashboard. Once at least one admin
+// account exists, the dashboard should use the JWT path exclusively.
 func (s *Server) adminAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if auth := r.Header.Get("Authorization"); strings.HasPrefix(auth, "Bearer ") {
+			token := strings.TrimPrefix(auth, "Bearer ")
+			if _, err := s.authSvc.ParseAdminToken(token); err == nil {
+				next.ServeHTTP(w, r)
+				return
+			}
+		}
+
 		key := r.Header.Get("X-Admin-Key")
-		if key == "" || key != s.adminAPIKey {
-			http.Error(w, `{"error":{"code":"forbidden","message":"Accès refusé."}}`, http.StatusForbidden)
+		if key != "" && key == s.adminAPIKey {
+			next.ServeHTTP(w, r)
 			return
 		}
-		next.ServeHTTP(w, r)
+
+		http.Error(w, `{"error":{"code":"forbidden","message":"Accès refusé."}}`, http.StatusForbidden)
 	})
 }
 

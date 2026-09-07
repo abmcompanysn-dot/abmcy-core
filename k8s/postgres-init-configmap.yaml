@@ -67,6 +67,12 @@ data:
         UNIQUE (tenant_id, email)
     );
 
+    -- Postgres traite chaque NULL comme distinct dans une contrainte UNIQUE
+    -- classique : UNIQUE(tenant_id, email) ne bloque donc PAS deux comptes
+    -- super-admin (tenant_id NULL) avec le même email. Cet index partiel
+    -- couvre spécifiquement ce cas.
+    CREATE UNIQUE INDEX idx_users_super_admin_email ON users (email) WHERE tenant_id IS NULL;
+
     ALTER TABLE users ENABLE ROW LEVEL SECURITY;
     CREATE POLICY tenant_isolation_users ON users
         USING (tenant_id = current_setting('app.tenant_id', true)::uuid);

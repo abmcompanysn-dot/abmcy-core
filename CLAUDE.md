@@ -118,6 +118,21 @@ Domaines confirmés (2026-09-07) :
   restent des tables séparées (spécifiques sur-mesure) — un tenant
   `commerce_general` ou `produit_numerique` les ignore simplement, elles
   ne sont pas mélangées au modèle produit générique.
+- **Authentification admin réelle** (2026-09-07) : comptes super-admin
+  individuels (`users.tenant_id IS NULL`, `role = 'super_admin'`) avec
+  login/mot de passe, en plus de — pas à la place de — la clé
+  `X-Admin-Key` statique. Décision explicite : garder `X-Admin-Key` comme
+  secours bootstrap (créer le tout premier compte admin sans être déjà
+  connecté) plutôt que de basculer entièrement et risquer un dashboard
+  inaccessible sur une base fraîche. Voir `internal/auth/admin.go`
+  (`AdminClaims`, distinct de `Claims` — un JWT admin ne doit jamais
+  pouvoir s'utiliser comme JWT tenant ni inversement) et
+  `httpserver.adminAuth` (accepte JWT admin OU `X-Admin-Key`). Index
+  unique partiel ajouté sur `users(email) WHERE tenant_id IS NULL` — la
+  contrainte `UNIQUE(tenant_id, email)` seule ne suffit pas, Postgres
+  traite chaque `NULL` comme distinct.
+  **Pas encore fait : logout (invalidation de token), mot de passe
+  oublié, page de gestion des comptes admin dans le dashboard.**
 
 ## État d'avancement
 
@@ -140,7 +155,10 @@ Domaines confirmés (2026-09-07) :
     `POST /fabrics/upload`, `GET/POST /gallery`, `GET/POST /cart`,
     `DELETE /cart/{itemID}`, `POST /reviews`, `GET /reviews`,
     `GET /reviews/pending`, `POST /reviews/{id}/publish`
-  - Scopées `X-Admin-Key` : `GET/POST /admin/tenants`,
+  - `POST /admin/auth/login` (email/mot de passe super-admin -> JWT)
+  - Scopées `adminAuth` (JWT admin **ou** `X-Admin-Key` en secours
+    bootstrap) : `GET/POST /admin/accounts`,
+    `PUT /admin/accounts/{userID}/active`, `GET/POST /admin/tenants`,
     `PUT /admin/tenants/{id}/rate-limit`,
     `PUT /admin/tenants/{id}/business-type`,
     `GET/PUT /admin/tenants/{id}/features`, `GET /admin/config`,
@@ -210,14 +228,26 @@ d'étape ni tout lancer en parallèle sans validation :
    navigation conditionnée à `GET /features`, détail commande enrichi
    avec historique de statut). Build + lint confirmés (agent puis
    vérification indépendante) pour les deux dashboards.
-5. **Authentification admin réelle** (comptes individuels login/mot de passe
-   au lieu de la clé `X-Admin-Key` statique partagée) — pas encore
-   commencée.
-6. Monitoring + alertes de sécurité (email en cas d'anomalie : pics
+5. ~~Authentification admin réelle~~ — fait côté backend (2026-09-07,
+   voir section décisions ci-dessus) : `go build`/`go vet` OK.
+   **Le dashboard admin ne consomme pas encore `POST /admin/auth/login`
+   ni les routes `/admin/accounts` — toujours en `X-Admin-Key` côté
+   frontend pour l'instant. Logout/mot de passe oublié pas implémentés.**
+6. **Authentification client final (acheteurs des tenants, ex: clients de
+   HANI'S)** — demandé explicitement (2026-09-07) : `POST /auth/login`
+   (déjà existant pour les comptes `users` scopés à un tenant),
+   `POST /auth/logout` (invalidation de token — pas encore de mécanisme,
+   JWT actuel n'est pas révocable avant expiration), `POST
+   /auth/forgot-password` + `POST /auth/reset-password` (email via
+   Resend), `GET/PATCH /auth/me` (profil : nom, email, téléphone, adresse,
+   historique de commandes). Distinct de l'auth admin ET de l'auth tenant
+   par clé API (`X-API-Key`) — c'est un troisième public : les clients
+   finaux qui achètent chez un tenant comme HANI'S. Pas encore commencé.
+7. Monitoring + alertes de sécurité (email en cas d'anomalie : pics
    d'erreurs, échecs de connexion répétés, quota dépassé) — pas commencé.
-7. Sitemap XML (référencement `landing/`) + flux XML produits par tenant
+8. Sitemap XML (référencement `landing/`) + flux XML produits par tenant
    (type Google Shopping) — pas commencé.
-8. Déploiement réel : k3s sur le VPS + vraies clés + DNS (4 sous-domaines
+9. Déploiement réel : k3s sur le VPS + vraies clés + DNS (4 sous-domaines
    `.abmcy.com` à pointer : `api`, `ad`, `dash`, `core`).
 
 Dépôt Git initialisé le 2026-09-07 (`git init`, commits réguliers depuis) —

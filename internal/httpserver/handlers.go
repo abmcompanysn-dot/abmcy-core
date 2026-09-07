@@ -357,6 +357,79 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, map[string]string{"token": token})
 }
 
+func (s *Server) handleAdminLogin(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+	if err := decodeJSON(r, &body); err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+
+	token, err := s.authSvc.LoginSuperAdmin(r.Context(), body.Email, body.Password)
+	if err != nil {
+		response.Err(w, err)
+		return
+	}
+	response.JSON(w, http.StatusOK, map[string]string{"token": token})
+}
+
+// --- Super-admin (compte administrateur ABMCY) ---------------------------
+//
+// Protégées par adminAuth (JWT admin OU X-Admin-Key en secours) — voir
+// server.go. Le tout premier compte se crée avec X-Admin-Key puisqu'aucun
+// JWT admin ne peut encore exister à ce moment-là.
+
+func (s *Server) handleAdminListAccounts(w http.ResponseWriter, r *http.Request) {
+	accounts, err := s.authSvc.ListSuperAdmins(r.Context())
+	if err != nil {
+		response.Err(w, err)
+		return
+	}
+	response.JSON(w, http.StatusOK, accounts)
+}
+
+func (s *Server) handleAdminCreateAccount(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+	if err := decodeJSON(r, &body); err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+
+	account, err := s.authSvc.CreateSuperAdmin(r.Context(), body.Email, body.Password)
+	if err != nil {
+		response.Err(w, err)
+		return
+	}
+	response.JSON(w, http.StatusCreated, account)
+}
+
+func (s *Server) handleAdminSetAccountActive(w http.ResponseWriter, r *http.Request) {
+	userID, err := parseUUID(chi.URLParam(r, "userID"))
+	if err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+
+	var body struct {
+		IsActive bool `json:"is_active"`
+	}
+	if err := decodeJSON(r, &body); err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+
+	if err := s.authSvc.SetSuperAdminActive(r.Context(), userID, body.IsActive); err != nil {
+		response.Err(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // --- Super-admin (tenant management) -------------------------------------
 
 func (s *Server) handleAdminListTenants(w http.ResponseWriter, r *http.Request) {
