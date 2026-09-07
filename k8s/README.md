@@ -19,6 +19,55 @@ vous-même une fois `k8s/` validé en production.
 > (Traefik + cert-manager par défaut), valable pour un VPS neuf sans projet
 > préexistant ; adaptez selon ce que vous trouvez déjà en place.
 
+## Sous-domaine par tenant (ex: hanis.api.abmcy.com)
+
+Chaque tenant peut avoir un sous-domaine dédié de `api.abmcy.com`, qui
+identifie automatiquement le tenant pour les requêtes publiques (connexion
+client final, inscription) sans avoir à préciser `tenant_slug` dans le corps
+de la requête — voir `internal/middleware/tenant_auth.go` (`SlugFromHost`) et
+`internal/httpserver/server.go` (`resolveTenantSlug`).
+
+**Important :** le sous-domaine identifie *quel* tenant, jamais *qui a le
+droit d'agir* — `X-API-Key` (personnel/intégration) et les JWT staff/admin
+restent obligatoires sur toutes les routes métier, exactement comme sur
+`api.abmcy.com`. Le sous-domaine ne dispense que du champ `tenant_slug` sur
+les routes publiques (`/auth/login`, `/auth/customer/*`).
+
+Pas de certificat wildcard automatique sur ce déploiement : le Caddy installé
+sur diarra-vps n'a pas de plugin DNS (et le DNS de `abmcy.com`, géré par
+Vercel, n'a pas de plugin Caddy mûr) — la validation DNS nécessaire à un
+certificat wildcard n'est donc pas possible ici. Chaque sous-domaine de
+tenant obtient à la place son propre certificat Let's Encrypt individuel par
+validation HTTP, comme `api.abmcy.com` lui-même. Procédure pour un nouveau
+tenant (ex: `hanis`) :
+
+1. **DNS** — chez le fournisseur DNS de `abmcy.com` (Vercel), ajouter un
+   enregistrement `CNAME hanis.api → api.abmcy.com` (ou un `A` direct vers
+   `169.58.214.115`).
+2. **Caddy** — sur le VPS, ajouter un bloc dans `/etc/caddy/Caddyfile` :
+   ```caddyfile
+   hanis.api.abmcy.com {
+       reverse_proxy 127.0.0.1:30080 {
+           header_up Host hanis.api.abmcy.com
+       }
+   }
+   ```
+   Puis valider et recharger sans interrompre les autres domaines déjà servis :
+   ```bash
+   caddy validate --config /etc/caddy/Caddyfile
+   systemctl reload caddy
+   ```
+   Caddy obtient et renouvelle automatiquement le certificat Let's Encrypt de
+   ce sous-domaine dès le premier accès.
+3. Vérifier : `curl https://hanis.api.abmcy.com/health` doit répondre
+   `{"status":"ok"}` avec un certificat valide.
+
+Cette étape 2 est manuelle par tenant tant qu'aucun plugin DNS Caddy pour
+Vercel n'est disponible — si le volume de tenants grossit au point que ça
+devienne pénible, envisager de migrer le DNS de `abmcy.com` vers un
+fournisseur avec un plugin Caddy mature (Cloudflare) pour activer un vrai
+certificat wildcard `*.api.abmcy.com`.
+
 Le `Dockerfile` à la racine du repo reste inchangé et sert toujours à builder
 l'image de l'API — k3s le réutilise tel quel.
 

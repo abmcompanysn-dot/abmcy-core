@@ -13,10 +13,13 @@ import (
 //
 // Troisième public, distinct du personnel tenant (X-API-Key) et du
 // super-admin ABMCY (adminAuth). Un client final (ex: acheteur chez
-// HANI'S) n'a pas de clé API — le tenant est identifié par tenant_slug
-// dans le corps des requêtes publiques ; une fois connecté, le tenant_id
-// voyage dans les claims du JWT (voir customerAuth), plus besoin de le
-// répéter.
+// HANI'S) n'a pas de clé API — le tenant est identifié soit par le
+// sous-domaine de la requête (ex: hanis.api.abmcy.com — voir
+// resolveTenantSlug/authmw.SlugFromHost), soit par tenant_slug dans le
+// corps de la requête si elle arrive sur api.abmcy.com directement ; le
+// sous-domaine prévaut quand les deux sont présents. Une fois connecté,
+// le tenant_id voyage dans les claims du JWT (voir customerAuth), plus
+// besoin de le répéter.
 
 func (s *Server) handleCustomerRegister(w http.ResponseWriter, r *http.Request) {
 	var body struct {
@@ -30,7 +33,7 @@ func (s *Server) handleCustomerRegister(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	t, err := s.lookupTenantBySlug(r.Context(), body.TenantSlug)
+	t, err := s.lookupTenantBySlug(r.Context(), resolveTenantSlug(r, body.TenantSlug))
 	if err != nil {
 		response.Err(w, apierror.ErrValidation)
 		return
@@ -55,7 +58,7 @@ func (s *Server) handleCustomerLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	t, err := s.lookupTenantBySlug(r.Context(), body.TenantSlug)
+	t, err := s.lookupTenantBySlug(r.Context(), resolveTenantSlug(r, body.TenantSlug))
 	if err != nil {
 		response.Err(w, apierror.ErrUnauthorized)
 		return
@@ -79,7 +82,7 @@ func (s *Server) handleCustomerForgotPassword(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	t, err := s.lookupTenantBySlug(r.Context(), body.TenantSlug)
+	t, err := s.lookupTenantBySlug(r.Context(), resolveTenantSlug(r, body.TenantSlug))
 	if err != nil {
 		// Réponse identique que le tenant existe ou non — pas de fuite
 		// d'information sur la structure interne via cet endpoint public.
@@ -126,7 +129,7 @@ func (s *Server) handleCustomerResetPassword(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	t, err := s.lookupTenantBySlug(r.Context(), body.TenantSlug)
+	t, err := s.lookupTenantBySlug(r.Context(), resolveTenantSlug(r, body.TenantSlug))
 	if err != nil {
 		response.Err(w, apierror.ErrValidation)
 		return

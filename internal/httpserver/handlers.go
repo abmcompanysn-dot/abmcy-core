@@ -365,7 +365,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	t, err := s.lookupTenantBySlug(r.Context(), body.TenantSlug)
+	t, err := s.lookupTenantBySlug(r.Context(), resolveTenantSlug(r, body.TenantSlug))
 	if err != nil {
 		response.Err(w, apierror.ErrUnauthorized)
 		return

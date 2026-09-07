@@ -360,12 +360,22 @@ func (s *Server) corsMiddleware(next http.Handler) http.Handler {
 }
 
 func (s *Server) lookupTenantBySlug(ctx context.Context, slug string) (authmw.Tenant, error) {
-	var t authmw.Tenant
-	err := s.pool.WithSystem(ctx, func(ctx context.Context, tx db.TxLike) error {
-		row := tx.QueryRow(ctx, `SELECT id, slug, plan, is_active, rate_limit_per_sec, rate_limit_burst FROM tenants WHERE slug = $1`, slug)
-		return row.Scan(&t.ID, &t.Slug, &t.Plan, &t.Active, &t.RateLimitPerSec, &t.RateLimitBurst)
-	})
-	return t, err
+	return authmw.LookupBySlug(ctx, s.pool, slug)
+}
+
+// resolveTenantSlug picks the tenant slug for a public request (customer
+// auth, staff login): the subdomain of api.abmcy.com if the request came
+// in on one (e.g. hanis.api.abmcy.com), otherwise the tenant_slug the
+// client put in the request body. The subdomain wins when both are
+// present, on the assumption that a request literally arriving on
+// hanis.api.abmcy.com is unambiguously about hanis — this is purely a
+// convenience for identifying WHICH tenant, never a substitute for the
+// X-API-Key/JWT checks that follow on every actual data-access route.
+func resolveTenantSlug(r *http.Request, bodySlug string) string {
+	if slug, ok := authmw.SlugFromHost(r.Host); ok {
+		return slug
+	}
+	return bodySlug
 }
 
 func parseUUID(s string) (uuid.UUID, error) {

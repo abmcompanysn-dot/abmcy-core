@@ -58,6 +58,40 @@ func LookupByID(ctx context.Context, pool *db.Pool, tenantID uuid.UUID) (Tenant,
 	return t, err
 }
 
+// LookupBySlug resolves a Tenant by its slug — used both by
+// httpserver.lookupTenantBySlug (tenant_slug in a request body) and by
+// SlugFromHost/the per-tenant subdomain middleware below.
+func LookupBySlug(ctx context.Context, pool *db.Pool, slug string) (Tenant, error) {
+	var t Tenant
+	err := pool.WithSystem(ctx, func(ctx context.Context, tx db.TxLike) error {
+		row := tx.QueryRow(ctx,
+			`SELECT id, slug, plan, is_active, rate_limit_per_sec, rate_limit_burst FROM tenants WHERE slug = $1`,
+			slug,
+		)
+		return row.Scan(&t.ID, &t.Slug, &t.Plan, &t.Active, &t.RateLimitPerSec, &t.RateLimitBurst)
+	})
+	return t, err
+}
+
+// SlugFromHost extracts a tenant slug from a subdomain of api.abmcy.com,
+// e.g. "hanis" from "hanis.api.abmcy.com". Returns "", false for the bare
+// api.abmcy.com host or any host that isn't a direct subdomain of it —
+// this is purely a convenience for identifying WHICH tenant a public
+// request is for (e.g. customer login), never a substitute for real
+// authorization (X-API-Key, staff/admin JWT) on tenant-management routes.
+func SlugFromHost(host string) (string, bool) {
+	host = strings.ToLower(strings.Split(host, ":")[0]) // strip a port if present
+	const suffix = ".api.abmcy.com"
+	if !strings.HasSuffix(host, suffix) {
+		return "", false
+	}
+	slug := strings.TrimSuffix(host, suffix)
+	if slug == "" || strings.Contains(slug, ".") {
+		return "", false // bare api.abmcy.com, or a deeper subdomain we don't support
+	}
+	return slug, true
+}
+
 // TenantAuth identifies the calling tenant from the X-API-Key header
 // (or "Authorization: Bearer pk_live_...") and attaches it to the
 // request context. It looks up tenants via WithSystem since, at this
