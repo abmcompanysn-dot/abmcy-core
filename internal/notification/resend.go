@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -42,8 +43,30 @@ type sendResponse struct {
 	ID string `json:"id"`
 }
 
+// Send uses the client's configured from-address with the default
+// sender name ("ABMCY CORE"), for platform-level emails (e.g. welcoming
+// a new tenant) that aren't sent on behalf of a specific tenant.
 func (c *ResendClient) Send(ctx context.Context, to, subject, html string) (string, error) {
-	payload := sendRequest{From: c.fromAddr, To: []string{to}, Subject: subject, HTML: html}
+	return c.SendAs(ctx, "ABMCY CORE", to, subject, html)
+}
+
+// SendAs sends with a custom display name on the same underlying
+// address (e.g. `"HANI'S" <support@core.abmcy.com>`) — lets each
+// tenant's emails look like they come from that tenant, while ABMCY
+// keeps a single verified sending domain and Resend API key.
+func (c *ResendClient) SendAs(ctx context.Context, fromName, to, subject, html string) (string, error) {
+	from := c.fromAddr
+	if fromName != "" {
+		// c.fromAddr is either a bare address ("a@b.com") or already
+		// "Name <a@b.com>" — extract the bare address so we don't nest
+		// display names when a custom fromName is requested.
+		addr := from
+		if start := strings.LastIndex(from, "<"); start != -1 {
+			addr = strings.TrimSuffix(strings.TrimPrefix(from[start:], "<"), ">")
+		}
+		from = fmt.Sprintf("%q <%s>", fromName, addr)
+	}
+	payload := sendRequest{From: from, To: []string{to}, Subject: subject, HTML: html}
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return "", fmt.Errorf("resend: encode: %w", err)

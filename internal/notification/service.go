@@ -37,6 +37,11 @@ func (s *Service) resendClient() (*ResendClient, error) {
 // SendEmail enforces each tenant's 100-email/day quota (email_quota_per_day
 // in the tenants table) before calling Resend. The daily counter resets
 // automatically when email_quota_reset_at is no longer today.
+//
+// The email is sent with the tenant's own name as the display sender
+// (e.g. `"HANI'S" <support@core.abmcy.com>`) — ABMCY keeps a single
+// verified sending domain and Resend API key across all tenants, but
+// each tenant's customers see that tenant's name, not "ABMCY CORE".
 func (s *Service) SendEmail(ctx context.Context, tenantID uuid.UUID, to, subject, html, template string) error {
 	resend, err := s.resendClient()
 	if err != nil {
@@ -44,6 +49,7 @@ func (s *Service) SendEmail(ctx context.Context, tenantID uuid.UUID, to, subject
 	}
 
 	var allowed bool
+	var tenantName string
 	err = s.pool.WithTenant(ctx, tenantID, func(ctx context.Context, tx db.TxLike) error {
 		// Reset the daily counter if we've rolled over to a new day.
 		if _, err := tx.Exec(ctx, `
@@ -55,8 +61,8 @@ func (s *Service) SendEmail(ctx context.Context, tenantID uuid.UUID, to, subject
 		}
 
 		var sent, quota int
-		row := tx.QueryRow(ctx, `SELECT email_sent_today, email_quota_per_day FROM tenants WHERE id = $1`, tenantID)
-		if err := row.Scan(&sent, &quota); err != nil {
+		row := tx.QueryRow(ctx, `SELECT name, email_sent_today, email_quota_per_day FROM tenants WHERE id = $1`, tenantID)
+		if err := row.Scan(&tenantName, &sent, &quota); err != nil {
 			return err
 		}
 		allowed = sent < quota
@@ -69,7 +75,7 @@ func (s *Service) SendEmail(ctx context.Context, tenantID uuid.UUID, to, subject
 		return apierror.ErrEmailQuota
 	}
 
-	resendID, sendErr := resend.Send(ctx, to, subject, html)
+	resendID, sendErr := resend.SendAs(ctx, tenantName, to, subject, html)
 	status := "sent"
 	if sendErr != nil {
 		status = "failed"
