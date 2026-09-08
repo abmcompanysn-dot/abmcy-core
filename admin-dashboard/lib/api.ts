@@ -121,6 +121,21 @@ export interface CreateTenantResponse {
   api_key_secret: string;
 }
 
+/** Compte super-admin ABMCY (users.tenant_id IS NULL, role = 'super_admin'). */
+export interface AdminAccount {
+  id: string;
+  email: string;
+  is_active: boolean;
+}
+
+/** Réponse de POST /admin/tenants/{tenantID}/logo — même forme que le
+ * retour de POST /uploads/image côté tenant-dashboard. */
+export interface UploadedImage {
+  id: string;
+  url: string;
+  size_bytes: number;
+}
+
 /** Clés de configuration plateforme gérées par /admin/config. */
 export type ConfigKey =
   | "R2_ACCOUNT_ID"
@@ -313,6 +328,106 @@ export function updateTenantRateLimit(
       body: JSON.stringify(input),
     }
   );
+}
+
+/** PUT /admin/tenants/{tenantID}/active — suspend ou réactive un tenant. */
+export function updateTenantActive(
+  adminKey: string,
+  tenantId: string,
+  isActive: boolean
+): Promise<void> {
+  return request<void>(
+    `/admin/tenants/${encodeURIComponent(tenantId)}/active`,
+    adminKey,
+    {
+      method: "PUT",
+      body: JSON.stringify({ is_active: isActive }),
+    }
+  );
+}
+
+/**
+ * POST /admin/tenants/{tenantID}/logo — upload un fichier logo pour un
+ * tenant depuis le dashboard admin (sans avoir besoin de la clé API de ce
+ * tenant). Ne modifie pas le profil : la réponse renvoie juste l'URL, à
+ * enregistrer ensuite via updateTenantProfile({ logo_url }).
+ */
+export function uploadTenantLogo(
+  adminKey: string,
+  tenantId: string,
+  file: File
+): Promise<UploadedImage> {
+  const form = new FormData();
+  form.append("image", file);
+  // request() ne peut pas être réutilisé tel quel : il force
+  // Content-Type: application/json, ce qui casserait un multipart/form-data
+  // (le navigateur doit fixer sa propre boundary). On duplique donc la
+  // logique d'auth + gestion d'erreur ici, plutôt que de complexifier
+  // request() pour ce seul appel.
+  const authHeaders: Record<string, string> = isJwt(adminKey)
+    ? { Authorization: `Bearer ${adminKey}` }
+    : { "X-Admin-Key": adminKey };
+
+  return fetch(`${API_URL}/admin/tenants/${encodeURIComponent(tenantId)}/logo`, {
+    method: "POST",
+    headers: authHeaders,
+    body: form,
+    cache: "no-store",
+  })
+    .catch(() => {
+      throw new ApiError(
+        0,
+        "Impossible de contacter le serveur. Vérifiez l'URL de l'API et votre connexion."
+      );
+    })
+    .then(async (res) => {
+      if (res.status === 403 || res.status === 401) {
+        throw new ApiError(res.status, "Clé admin invalide ou accès refusé.", "forbidden");
+      }
+      if (!res.ok) {
+        let body: ApiErrorBody | null = null;
+        try {
+          body = (await res.json()) as ApiErrorBody;
+        } catch {
+          // corps non-JSON ou vide
+        }
+        throw new ApiError(
+          res.status,
+          body?.error?.message || `Erreur inattendue (HTTP ${res.status}).`,
+          body?.error?.code
+        );
+      }
+      return (await res.json()) as UploadedImage;
+    });
+}
+
+/** GET /admin/accounts — liste les comptes super-admin ABMCY. */
+export function listAdminAccounts(adminKey: string): Promise<AdminAccount[]> {
+  return request<AdminAccount[]>("/admin/accounts", adminKey, { method: "GET" });
+}
+
+/** POST /admin/accounts — crée un nouveau compte super-admin ABMCY. */
+export function createAdminAccount(
+  adminKey: string,
+  email: string,
+  password: string
+): Promise<AdminAccount> {
+  return request<AdminAccount>("/admin/accounts", adminKey, {
+    method: "POST",
+    body: JSON.stringify({ email, password }),
+  });
+}
+
+/** PUT /admin/accounts/{userID}/active — active ou désactive un compte super-admin. */
+export function setAdminAccountActive(
+  adminKey: string,
+  userId: string,
+  isActive: boolean
+): Promise<void> {
+  return request<void>(`/admin/accounts/${encodeURIComponent(userId)}/active`, adminKey, {
+    method: "PUT",
+    body: JSON.stringify({ is_active: isActive }),
+  });
 }
 
 /** PUT /admin/tenants/{tenantID}/business-type — modifie le type de commerce d'un tenant. */
