@@ -696,6 +696,82 @@ func (s *Server) handleAdminUpdateRateLimit(w http.ResponseWriter, r *http.Reque
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// handleAdminSetTenantActive suspends or reinstates a tenant (e.g. a
+// client stops paying, or a dispute needs the account frozen). See
+// tenant.Service.SetActive for how this interacts with the existing
+// is_active enforcement on X-API-Key / staff-JWT requests.
+func (s *Server) handleAdminSetTenantActive(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := parseUUID(chi.URLParam(r, "tenantID"))
+	if err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+
+	var body struct {
+		IsActive bool `json:"is_active"`
+	}
+	if err := decodeJSON(r, &body); err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+
+	if err := s.tenants.SetActive(r.Context(), tenantID, body.IsActive); err != nil {
+		response.Err(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleAdminUploadTenantLogo lets ABMCY staff upload a tenant's logo
+// directly from the admin dashboard, without needing that tenant's own
+// X-API-Key. It reuses storage.Service.UploadProductImage — which already
+// takes an explicit tenantID rather than reading one off request context —
+// with productID always nil (a logo isn't attached to any product) and the
+// tenantID taken from the URL (adminAuth already verified the caller is a
+// super-admin; RLS isolation for the actual DB write still goes through
+// UploadProductImage's own WithTenant call, same as the tenant-facing
+// upload path). The returned URL still needs a separate PUT
+// .../profile call (logo_url) to actually attach it — this endpoint only
+// uploads and returns the URL.
+func (s *Server) handleAdminUploadTenantLogo(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := parseUUID(chi.URLParam(r, "tenantID"))
+	if err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, maxUploadBytes)
+	if err := r.ParseMultipartForm(maxUploadBytes); err != nil {
+		response.Err(w, apierror.New(413, "file_too_large", "Fichier trop volumineux."))
+		return
+	}
+
+	file, header, err := r.FormFile("image")
+	if err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+	defer file.Close()
+
+	data, err := io.ReadAll(file)
+	if err != nil {
+		response.Err(w, apierror.ErrInternal)
+		return
+	}
+
+	contentType := header.Header.Get("Content-Type")
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+
+	img, err := s.storage.UploadProductImage(r.Context(), tenantID, nil, header.Filename, contentType, data)
+	if err != nil {
+		response.Err(w, err)
+		return
+	}
+	response.JSON(w, http.StatusCreated, img)
+}
+
 // handleAdminUpdateFeatures toggles opt-in tenant capabilities — right now
 // just the storefront catalog (products, fabrics, cart, gallery, reviews).
 // A tenant selling entirely over WhatsApp/in-store can stay without it;

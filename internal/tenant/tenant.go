@@ -328,6 +328,26 @@ func (s *Service) UpdateBusinessType(ctx context.Context, tenantID uuid.UUID, bu
 	})
 }
 
+// SetActive lets the super-admin suspend or reinstate a tenant (e.g. a
+// client stops paying, or a dispute needs the account frozen) without
+// deleting anything. Enforcement already exists on the read side:
+// middleware.TenantAuth rejects an X-API-Key request once is_active is
+// false, and the staff-JWT path in httpserver checks LookupByID(...).Active
+// the same way — so flipping this flag immediately locks the tenant's own
+// staff and integrations out, with no other change required.
+func (s *Service) SetActive(ctx context.Context, tenantID uuid.UUID, active bool) error {
+	return s.pool.WithSystem(ctx, func(ctx context.Context, tx db.TxLike) error {
+		tag, err := tx.Exec(ctx, `UPDATE tenants SET is_active = $1, updated_at = now() WHERE id = $2`, active, tenantID)
+		if err != nil {
+			return err
+		}
+		if tag.RowsAffected() == 0 {
+			return apierror.ErrNotFound
+		}
+		return nil
+	})
+}
+
 func randomKey(prefix string) (string, error) {
 	b := make([]byte, 24)
 	if _, err := rand.Read(b); err != nil {
