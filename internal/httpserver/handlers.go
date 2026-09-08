@@ -9,6 +9,7 @@ import (
 	"net/http"
 
 	"github.com/abmcy/core/internal/catalog"
+	"github.com/abmcy/core/internal/emailtemplate"
 	authmw "github.com/abmcy/core/internal/middleware"
 	"github.com/abmcy/core/internal/order"
 	"github.com/abmcy/core/internal/platformconfig"
@@ -63,11 +64,15 @@ func (s *Server) sendOrderConfirmationEmail(ctx context.Context, tenantID uuid.U
 	if o.CustomerEmail == "" {
 		return
 	}
-	html := "<p>Bonjour " + o.CustomerName + ",</p>" +
-		"<p>Votre commande <strong>" + o.OrderNumber + "</strong> a bien été enregistrée " +
-		"pour un montant de " + fmt.Sprintf("%d", o.TotalAmount) + " FCFA.</p>" +
-		"<p>Nous vous tiendrons informé(e) de son avancement.</p>"
-	if err := s.notifications.SendEmail(ctx, tenantID, o.CustomerEmail, "Confirmation de votre commande "+o.OrderNumber, html, "order_confirmation"); err != nil {
+	body := emailtemplate.Render(emailtemplate.Data{
+		Heading: "Commande confirmée",
+		Paragraphs: []string{
+			"Bonjour " + o.CustomerName + ",",
+			fmt.Sprintf("Votre commande %s a bien été enregistrée pour un montant de %d FCFA.", o.OrderNumber, o.TotalAmount),
+			"Nous vous tiendrons informé(e) de son avancement.",
+		},
+	})
+	if err := s.notifications.SendEmail(ctx, tenantID, o.CustomerEmail, "Confirmation de votre commande "+o.OrderNumber, body, "order_confirmation"); err != nil {
 		slog.Error("order confirmation email failed to send", "tenant_id", tenantID, "order_id", o.ID, "error", err)
 	}
 }
@@ -489,9 +494,18 @@ func (s *Server) handleAdminCreateTenant(w http.ResponseWriter, r *http.Request)
 	// vers la connexion. Un échec d'envoi ne doit pas faire échouer la
 	// création du tenant elle-même.
 	if body.ContactEmail != "" {
-		html := "<p>Bonjour " + result.Tenant.Name + ",</p>" +
-			"<p>Votre espace ABMCY a été créé. Connectez-vous sur <a href=\"https://dash.abmcy.com\">dash.abmcy.com</a> " +
-			"avec les identifiants qui vous ont été communiqués.</p>"
+		html := emailtemplate.Render(emailtemplate.Data{
+			Heading: "Bienvenue sur ABMCY",
+			Paragraphs: []string{
+				"Bonjour " + result.Tenant.Name + ",",
+				"Votre espace ABMCY a été créé avec succès.",
+				"Connectez-vous dès maintenant avec les identifiants qui vous ont été communiqués.",
+			},
+			Button: &emailtemplate.Button{
+				Label: "Accéder à mon espace",
+				URL:   "https://dash.abmcy.com",
+			},
+		})
 		if sendErr := s.notifications.SendEmail(r.Context(), result.Tenant.ID, body.ContactEmail,
 			"Bienvenue sur ABMCY", html, "tenant_welcome"); sendErr != nil {
 			slog.Error("tenant welcome email failed to send", "tenant_id", result.Tenant.ID, "error", sendErr)

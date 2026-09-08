@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/abmcy/core/internal/auth"
+	"github.com/abmcy/core/internal/emailtemplate"
 	"github.com/abmcy/core/pkg/apierror"
 	"github.com/abmcy/core/pkg/response"
 )
@@ -100,9 +101,18 @@ func (s *Server) handleCustomerForgotPassword(w http.ResponseWriter, r *http.Req
 
 	if found {
 		resetURL := "https://dash.abmcy.com/" + t.Slug + "/reset-password?token=" + plaintextToken
-		html := "<p>Vous avez demandé la réinitialisation de votre mot de passe.</p>" +
-			"<p><a href=\"" + resetURL + "\">Cliquez ici pour choisir un nouveau mot de passe</a> (valable 1 heure).</p>" +
-			"<p>Si vous n'êtes pas à l'origine de cette demande, ignorez cet email.</p>"
+		html := emailtemplate.Render(emailtemplate.Data{
+			Heading: "Réinitialisation de votre mot de passe",
+			Paragraphs: []string{
+				"Vous avez demandé la réinitialisation de votre mot de passe.",
+				"Cliquez sur le bouton ci-dessous pour choisir un nouveau mot de passe. Ce lien est valable 1 heure.",
+			},
+			Button: &emailtemplate.Button{
+				Label: "Choisir un nouveau mot de passe",
+				URL:   resetURL,
+			},
+			FooterNote: "Si vous n'êtes pas à l'origine de cette demande, ignorez cet email.",
+		})
 		// Best-effort côté client : un email non configuré/en échec ne
 		// doit ni empêcher la réponse générique de partir, ni révéler que
 		// le compte existe. Mais l'échec est réel et doit être visible côté
