@@ -319,6 +319,16 @@ GET /features
 }
 ```
 
+> **Activation.** Ces services ne s'activent pas eux-mêmes : contactez
+> ABMCY pour qu'un opérateur les bascule depuis le dashboard admin
+> (`PUT /admin/tenants/{id}/features`). Un nouveau compte reçoit un
+> préréglage raisonnable selon son secteur d'activité au moment de sa
+> création (couture sur-mesure → produits + tissus + galerie + avis ;
+> commerce général ou produit numérique → produits + panier + avis ;
+> autre → rien de pré-activé) — c'est un point de départ, pas une
+> limite : n'importe quelle combinaison des cinq services peut être
+> activée ou désactivée ensuite, sans lien avec votre secteur déclaré.
+
 ### Produits
 
 Le modèle de produit est générique — `attributes` est un objet JSON libre où

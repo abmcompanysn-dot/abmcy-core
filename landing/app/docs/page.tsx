@@ -393,8 +393,9 @@ image=@photo.jpg`}</pre>
               </span>
             </h2>
             <p className="docs-desc">
-              Produits, tissus, panier, galerie et avis — activé à la demande pour votre
-              compte. Vérifiez votre statut :
+              Cinq services indépendants — produits, tissus, panier, galerie et avis —
+              chacun activé à la demande pour votre compte selon votre activité. Vérifiez
+              votre statut :
             </p>
             <div className="docs-endpoint">
               <div className="docs-endpoint-head">
@@ -423,6 +424,17 @@ image=@photo.jpg`}</pre>
               <span className="docs-err-code">gallery_not_enabled</span> ou{" "}
               <span className="docs-err-code">reviews_not_enabled</span>.
             </p>
+            <div className="docs-callout">
+              <strong>Activation.</strong> Ces services ne s&apos;activent pas
+              eux-mêmes : contactez ABMCY pour qu&apos;un opérateur les
+              bascule depuis le dashboard admin. Un nouveau compte reçoit un
+              préréglage selon son secteur d&apos;activité à la création
+              (couture sur-mesure → produits + tissus + galerie + avis ;
+              commerce général ou produit numérique → produits + panier +
+              avis ; autre → rien de pré-activé) — un point de départ, pas
+              une limite : n&apos;importe quelle combinaison peut être
+              activée ou désactivée ensuite.
+            </div>
 
             <h3 className="docs-op-title">Produits — modèle générique</h3>
             <p className="docs-op-note">
