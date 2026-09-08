@@ -1,5 +1,9 @@
+"use client";
+
+import { useState } from "react";
 import type { Product } from "@/lib/api";
 import { formatFCFA } from "@/lib/format";
+import { EditProductForm } from "./EditProductForm";
 
 // L'image d'un produit peut venir soit de product_images (upload lié au
 // produit dès sa création), soit — cas des imports en masse comme le
@@ -34,7 +38,15 @@ function formatAttributeValue(value: unknown): string {
   return String(value);
 }
 
-export function ProductsTable({ products }: { products: Product[] }) {
+export function ProductsTable({
+  products,
+  onUpdated,
+}: {
+  products: Product[];
+  onUpdated?: (product: Product) => void;
+}) {
+  const [editing, setEditing] = useState<Product | null>(null);
+
   if (products.length === 0) {
     return (
       <div className="rounded-xl border border-slate-200 bg-white p-10 text-center text-sm text-slate-500">
@@ -57,6 +69,7 @@ export function ProductsTable({ products }: { products: Product[] }) {
             <th className="px-4 py-3 font-medium">Stock</th>
             <th className="px-4 py-3 font-medium">Attributs</th>
             <th className="px-4 py-3 font-medium">Mise en avant</th>
+            <th className="px-4 py-3 font-medium text-right">Action</th>
           </tr>
         </thead>
         <tbody>
@@ -82,7 +95,14 @@ export function ProductsTable({ products }: { products: Product[] }) {
                 )}
               </td>
               <td className="px-4 py-3 text-slate-900">
-                <div className="max-w-xs font-medium">{product.name}</div>
+                <div className="max-w-xs font-medium">
+                  {product.name}
+                  {!product.is_active && (
+                    <span className="ml-2 inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">
+                      Inactif
+                    </span>
+                  )}
+                </div>
                 {product.description && (
                   <div className="mt-0.5 line-clamp-2 max-w-xs text-xs text-slate-500">
                     {product.description}
@@ -131,11 +151,30 @@ export function ProductsTable({ products }: { products: Product[] }) {
                   <span className="text-slate-400">—</span>
                 )}
               </td>
+              <td className="px-4 py-3 text-right">
+                <button
+                  onClick={() => setEditing(product)}
+                  className="text-xs font-medium text-indigo-600 hover:underline"
+                >
+                  Modifier
+                </button>
+              </td>
             </tr>
             );
           })}
         </tbody>
       </table>
+
+      {editing && (
+        <EditProductForm
+          product={editing}
+          onClose={() => setEditing(null)}
+          onUpdated={(updated) => {
+            onUpdated?.(updated);
+            setEditing(null);
+          }}
+        />
+      )}
     </div>
   );
 }

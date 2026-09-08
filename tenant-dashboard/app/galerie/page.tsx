@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { useToast } from "@/lib/toast-context";
 import {
   ApiError,
   listGalleryPhotos,
@@ -10,6 +11,7 @@ import {
 import { CatalogGate } from "@/components/CatalogGate";
 import { NewGalleryPhotoForm } from "@/components/NewGalleryPhotoForm";
 import { GalleryGrid } from "@/components/GalleryGrid";
+import { LoadingBlock } from "@/components/Spinner";
 
 const CATEGORY_FILTERS: { value: string; label: string }[] = [
   { value: "", label: "Toutes" },
@@ -21,6 +23,7 @@ const CATEGORY_FILTERS: { value: string; label: string }[] = [
 
 function GaleriePageContent() {
   const { apiKey } = useAuth();
+  const { showToast } = useToast();
   const [photos, setPhotos] = useState<GalleryPhoto[] | null>(null);
   const [category, setCategory] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -61,6 +64,11 @@ function GaleriePageContent() {
 
   function handleCreated(photo: GalleryPhoto) {
     setPhotos((prev) => (prev ? [photo, ...prev] : [photo]));
+    showToast("Photo ajoutée à la galerie.");
+  }
+
+  function handleDeleted(photoId: string) {
+    setPhotos((prev) => prev?.filter((p) => p.id !== photoId) ?? prev);
   }
 
   return (
@@ -106,11 +114,9 @@ function GaleriePageContent() {
       )}
 
       {loading && photos === null ? (
-        <div className="rounded-xl border border-slate-200 bg-white p-10 text-center text-sm text-slate-500">
-          Chargement de la galerie...
-        </div>
+        <LoadingBlock label="Chargement de la galerie..." />
       ) : (
-        <GalleryGrid photos={photos ?? []} />
+        <GalleryGrid photos={photos ?? []} onDeleted={handleDeleted} />
       )}
     </div>
   );

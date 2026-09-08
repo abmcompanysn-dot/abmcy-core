@@ -163,6 +163,40 @@ func (s *Server) handleCreateFabric(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusCreated, f)
 }
 
+func (s *Server) handleUpdateFabric(w http.ResponseWriter, r *http.Request) {
+	t, _ := authmw.TenantFromContext(r.Context())
+	fabricID, err := parseUUID(chi.URLParam(r, "fabricID"))
+	if err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+
+	var body struct {
+		Name        *string `json:"name"`
+		Description *string `json:"description"`
+		ExtraPrice  *int    `json:"extra_price"`
+		ImageURL    *string `json:"image_url"`
+		IsActive    *bool   `json:"is_active"`
+	}
+	if err := decodeJSON(r, &body); err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+
+	f, err := s.fabrics.Update(r.Context(), t.ID, fabricID, catalog.UpdateFabricInput{
+		Name:        body.Name,
+		Description: body.Description,
+		ExtraPrice:  body.ExtraPrice,
+		ImageURL:    body.ImageURL,
+		IsActive:    body.IsActive,
+	})
+	if err != nil {
+		response.Err(w, err)
+		return
+	}
+	response.JSON(w, http.StatusOK, f)
+}
+
 // handleUploadFabricPhoto lets a client upload a photo of their own fabric
 // (the "envoi_photo" flow) — reuses the same R2 upload path as product
 // images, just without attaching a product_id.
@@ -236,6 +270,49 @@ func (s *Server) handleAddGalleryPhoto(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	response.JSON(w, http.StatusCreated, p)
+}
+
+func (s *Server) handleUpdateGalleryPhoto(w http.ResponseWriter, r *http.Request) {
+	t, _ := authmw.TenantFromContext(r.Context())
+	photoID, err := parseUUID(chi.URLParam(r, "photoID"))
+	if err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+
+	var body struct {
+		Category *string `json:"category"`
+		Caption  *string `json:"caption"`
+	}
+	if err := decodeJSON(r, &body); err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+
+	p, err := s.gallery.Update(r.Context(), t.ID, photoID, catalog.UpdatePhotoInput{
+		Category: body.Category,
+		Caption:  body.Caption,
+	})
+	if err != nil {
+		response.Err(w, err)
+		return
+	}
+	response.JSON(w, http.StatusOK, p)
+}
+
+func (s *Server) handleDeleteGalleryPhoto(w http.ResponseWriter, r *http.Request) {
+	t, _ := authmw.TenantFromContext(r.Context())
+	photoID, err := parseUUID(chi.URLParam(r, "photoID"))
+	if err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+
+	if err := s.gallery.Delete(r.Context(), t.ID, photoID); err != nil {
+		response.Err(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // --- Cart -----------------------------------------------------------------
@@ -418,6 +495,25 @@ func (s *Server) handlePublishReview(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.reviews.Publish(r.Context(), t.ID, reviewID); err != nil {
+		response.Err(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleDeleteReview rejects/removes a review — there is no "rejected"
+// status in the schema (see internal/catalog/reviews.go Delete), so
+// rejecting a pending review (or pulling down one already published) is
+// modeled as a hard delete.
+func (s *Server) handleDeleteReview(w http.ResponseWriter, r *http.Request) {
+	t, _ := authmw.TenantFromContext(r.Context())
+	reviewID, err := parseUUID(chi.URLParam(r, "reviewID"))
+	if err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+
+	if err := s.reviews.Delete(r.Context(), t.ID, reviewID); err != nil {
 		response.Err(w, err)
 		return
 	}

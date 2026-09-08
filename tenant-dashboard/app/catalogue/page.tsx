@@ -2,13 +2,16 @@
 
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { useToast } from "@/lib/toast-context";
 import { ApiError, listProducts, type Product } from "@/lib/api";
 import { CatalogGate } from "@/components/CatalogGate";
 import { NewProductForm } from "@/components/NewProductForm";
 import { ProductsTable } from "@/components/ProductsTable";
+import { LoadingBlock } from "@/components/Spinner";
 
 function CataloguePageContent() {
   const { apiKey } = useAuth();
+  const { showToast } = useToast();
   const [products, setProducts] = useState<Product[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
@@ -48,6 +51,13 @@ function CataloguePageContent() {
 
   function handleCreated(product: Product) {
     setProducts((prev) => (prev ? [product, ...prev] : [product]));
+    showToast("Produit créé avec succès.");
+  }
+
+  function handleUpdated(product: Product) {
+    setProducts((prev) =>
+      prev ? prev.map((p) => (p.id === product.id ? product : p)) : prev
+    );
   }
 
   return (
@@ -77,11 +87,9 @@ function CataloguePageContent() {
       )}
 
       {loading && products === null ? (
-        <div className="rounded-xl border border-slate-200 bg-white p-10 text-center text-sm text-slate-500">
-          Chargement des produits...
-        </div>
+        <LoadingBlock label="Chargement des produits..." />
       ) : (
-        <ProductsTable products={products ?? []} />
+        <ProductsTable products={products ?? []} onUpdated={handleUpdated} />
       )}
     </div>
   );

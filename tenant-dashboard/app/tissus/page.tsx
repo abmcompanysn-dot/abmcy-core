@@ -2,13 +2,16 @@
 
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { useToast } from "@/lib/toast-context";
 import { ApiError, listFabrics, type Fabric } from "@/lib/api";
 import { CatalogGate } from "@/components/CatalogGate";
 import { NewFabricForm } from "@/components/NewFabricForm";
 import { FabricsGallery } from "@/components/FabricsGallery";
+import { LoadingBlock } from "@/components/Spinner";
 
 function TissusPageContent() {
   const { apiKey } = useAuth();
+  const { showToast } = useToast();
   const [fabrics, setFabrics] = useState<Fabric[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
@@ -48,6 +51,13 @@ function TissusPageContent() {
 
   function handleCreated(fabric: Fabric) {
     setFabrics((prev) => (prev ? [fabric, ...prev] : [fabric]));
+    showToast("Tissu créé avec succès.");
+  }
+
+  function handleUpdated(fabric: Fabric) {
+    setFabrics((prev) =>
+      prev ? prev.map((f) => (f.id === fabric.id ? fabric : f)) : prev
+    );
   }
 
   return (
@@ -78,11 +88,9 @@ function TissusPageContent() {
       )}
 
       {loading && fabrics === null ? (
-        <div className="rounded-xl border border-slate-200 bg-white p-10 text-center text-sm text-slate-500">
-          Chargement des tissus...
-        </div>
+        <LoadingBlock label="Chargement des tissus..." />
       ) : (
-        <FabricsGallery fabrics={fabrics ?? []} />
+        <FabricsGallery fabrics={fabrics ?? []} onUpdated={handleUpdated} />
       )}
     </div>
   );

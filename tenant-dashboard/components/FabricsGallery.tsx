@@ -1,7 +1,19 @@
+"use client";
+
+import { useState } from "react";
 import type { Fabric } from "@/lib/api";
 import { formatFCFA } from "@/lib/format";
+import { EditFabricForm } from "./EditFabricForm";
 
-export function FabricsGallery({ fabrics }: { fabrics: Fabric[] }) {
+export function FabricsGallery({
+  fabrics,
+  onUpdated,
+}: {
+  fabrics: Fabric[];
+  onUpdated?: (fabric: Fabric) => void;
+}) {
+  const [editing, setEditing] = useState<Fabric | null>(null);
+
   if (fabrics.length === 0) {
     return (
       <div className="rounded-xl border border-slate-200 bg-white p-10 text-center text-sm text-slate-500">
@@ -33,20 +45,44 @@ export function FabricsGallery({ fabrics }: { fabrics: Fabric[] }) {
           <div className="space-y-1 p-3">
             <p className="line-clamp-2 text-sm font-medium text-slate-900">
               {fabric.name}
+              {!fabric.is_active && (
+                <span className="ml-1 text-xs font-normal text-slate-400">
+                  (inactif)
+                </span>
+              )}
             </p>
             {fabric.description && (
               <p className="line-clamp-2 text-xs text-slate-500">
                 {fabric.description}
               </p>
             )}
-            <p className="text-xs font-medium text-indigo-600">
-              {fabric.extra_price > 0
-                ? `+ ${formatFCFA(fabric.extra_price)}`
-                : "Sans supplément"}
-            </p>
+            <div className="flex items-center justify-between pt-1">
+              <p className="text-xs font-medium text-indigo-600">
+                {fabric.extra_price > 0
+                  ? `+ ${formatFCFA(fabric.extra_price)}`
+                  : "Sans supplément"}
+              </p>
+              <button
+                onClick={() => setEditing(fabric)}
+                className="text-xs font-medium text-slate-500 hover:text-indigo-600 hover:underline"
+              >
+                Modifier
+              </button>
+            </div>
           </div>
         </div>
       ))}
+
+      {editing && (
+        <EditFabricForm
+          fabric={editing}
+          onClose={() => setEditing(null)}
+          onUpdated={(updated) => {
+            onUpdated?.(updated);
+            setEditing(null);
+          }}
+        />
+      )}
     </div>
   );
 }
