@@ -271,7 +271,21 @@ func (s *Server) handleUploadImage(w http.ResponseWriter, r *http.Request) {
 		contentType = "application/octet-stream"
 	}
 
-	img, err := s.storage.UploadProductImage(r.Context(), t.ID, nil, header.Filename, contentType, data)
+	// product_id is optional — omit it to upload a standalone image (e.g.
+	// for use in the gallery or a fabric), or pass it to attach the image
+	// directly to that product's product_images (returned later by
+	// GET /products/{id} as `images`).
+	var productID *uuid.UUID
+	if raw := r.URL.Query().Get("product_id"); raw != "" {
+		id, err := parseUUID(raw)
+		if err != nil {
+			response.Err(w, apierror.ErrValidation)
+			return
+		}
+		productID = &id
+	}
+
+	img, err := s.storage.UploadProductImage(r.Context(), t.ID, productID, header.Filename, contentType, data)
 	if err != nil {
 		response.Err(w, err)
 		return
