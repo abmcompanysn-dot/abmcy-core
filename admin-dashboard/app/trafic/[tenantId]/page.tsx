@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { ApiError, getTenantTraffic, type RecentRequest } from "@/lib/api";
+import { LoadingBlock } from "@/components/Spinner";
 
 function StatusCodeBadge({ status }: { status: number }) {
   const classes =
@@ -123,9 +124,7 @@ export default function TenantTrafficDetailPage() {
       )}
 
       {loading && requests === null ? (
-        <div className="rounded-xl border border-slate-200 bg-white p-10 text-center text-sm text-slate-500">
-          Chargement des requêtes...
-        </div>
+        <LoadingBlock label="Chargement des requêtes..." />
       ) : requests && requests.length === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center text-sm text-slate-500">
           Aucune requête enregistrée pour ce tenant.

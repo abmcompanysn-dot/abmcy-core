@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { useToast } from "@/lib/toast-context";
 import { ApiError, updateTenantRateLimit } from "@/lib/api";
 
 /**
@@ -20,6 +21,7 @@ export function RateLimitEditor({
   onSaved: (perSec: number, burst: number) => void;
 }) {
   const { adminKey } = useAuth();
+  const { showToast } = useToast();
   const [editing, setEditing] = useState(false);
   const [perSecValue, setPerSecValue] = useState(String(perSec));
   const [burstValue, setBurstValue] = useState(String(burst));
@@ -57,12 +59,14 @@ export function RateLimitEditor({
       });
       onSaved(nextPerSec, nextBurst);
       setEditing(false);
+      showToast("Limites de trafic mises à jour.", "success");
     } catch (err) {
-      setError(
+      const message =
         err instanceof ApiError
           ? err.message
-          : "Impossible de mettre à jour les limites de trafic."
-      );
+          : "Impossible de mettre à jour les limites de trafic.";
+      setError(message);
+      showToast(message, "error");
     } finally {
       setSaving(false);
     }

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { useToast } from "@/lib/toast-context";
 import {
   ApiError,
   updateTenantBusinessType,
@@ -24,6 +25,7 @@ export function BusinessTypeEditor({
   onSaved: (businessType: BusinessType) => void;
 }) {
   const { adminKey } = useAuth();
+  const { showToast } = useToast();
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState<BusinessType>(businessType);
   const [saving, setSaving] = useState(false);
@@ -43,12 +45,14 @@ export function BusinessTypeEditor({
       await updateTenantBusinessType(adminKey, tenantId, value);
       onSaved(value);
       setEditing(false);
+      showToast("Type de commerce mis à jour.", "success");
     } catch (err) {
-      setError(
+      const message =
         err instanceof ApiError
           ? err.message
-          : "Impossible de mettre à jour le type de commerce."
-      );
+          : "Impossible de mettre à jour le type de commerce.";
+      setError(message);
+      showToast(message, "error");
     } finally {
       setSaving(false);
     }

@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { useToast } from "@/lib/toast-context";
 import {
   ApiError,
   createTenant,
@@ -27,6 +28,7 @@ export function CreateTenantForm({
   onCreated: (tenant: Tenant) => void;
 }) {
   const { adminKey } = useAuth();
+  const { showToast } = useToast();
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [slugTouched, setSlugTouched] = useState(false);
@@ -66,16 +68,18 @@ export function CreateTenantForm({
       });
       onCreated(result.tenant);
       setNewSecret({ tenantName: result.tenant.name, secret: result.api_key_secret });
+      showToast(`Tenant « ${result.tenant.name} » créé.`, "success");
       setName("");
       setSlug("");
       setSlugTouched(false);
       setBusinessType("general");
     } catch (err) {
-      if (err instanceof ApiError) {
-        setError(err.message);
-      } else {
-        setError("Une erreur inconnue est survenue lors de la création.");
-      }
+      const message =
+        err instanceof ApiError
+          ? err.message
+          : "Une erreur inconnue est survenue lors de la création.";
+      setError(message);
+      showToast(message, "error");
     } finally {
       setLoading(false);
     }

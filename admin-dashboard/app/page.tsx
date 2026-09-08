@@ -10,6 +10,7 @@ import {
 } from "@/lib/api";
 import { CreateTenantForm } from "@/components/CreateTenantForm";
 import { TenantsTable } from "@/components/TenantsTable";
+import { LoadingBlock } from "@/components/Spinner";
 
 export default function TenantsPage() {
   const { adminKey } = useAuth();
@@ -98,6 +99,14 @@ export default function TenantsPage() {
     );
   }
 
+  function handleActiveSaved(tenantId: string, isActive: boolean) {
+    setTenants((prev) =>
+      prev
+        ? prev.map((t) => (t.id === tenantId ? { ...t, is_active: isActive } : t))
+        : prev
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -125,14 +134,13 @@ export default function TenantsPage() {
       )}
 
       {loading && tenants === null ? (
-        <div className="rounded-xl border border-slate-200 bg-white p-10 text-center text-sm text-slate-500">
-          Chargement des tenants...
-        </div>
+        <LoadingBlock label="Chargement des tenants..." />
       ) : (
         <TenantsTable
           tenants={tenants ?? []}
           onRateLimitSaved={handleRateLimitSaved}
           onBusinessTypeSaved={handleBusinessTypeSaved}
+          onActiveSaved={handleActiveSaved}
         />
       )}
     </div>

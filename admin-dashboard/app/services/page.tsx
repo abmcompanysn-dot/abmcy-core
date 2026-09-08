@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { ApiError, getConfigStatus, type ConfigKey, type ConfigStatus } from "@/lib/api";
 import { ConfigKeyField } from "@/components/ConfigKeyField";
+import { LoadingBlock } from "@/components/Spinner";
 
 interface ServiceGroup {
   title: string;
@@ -133,9 +134,7 @@ export default function ServicesPage() {
       )}
 
       {loading && statuses === null ? (
-        <div className="rounded-xl border border-slate-200 bg-white p-10 text-center text-sm text-slate-500">
-          Chargement de la configuration...
-        </div>
+        <LoadingBlock label="Chargement de la configuration..." />
       ) : (
         <div className="space-y-6">
           {SERVICE_GROUPS.map((group) => (

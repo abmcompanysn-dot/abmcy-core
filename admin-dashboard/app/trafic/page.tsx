@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import { ApiError, getTrafficSummary, type TrafficSummary } from "@/lib/api";
+import { LoadingBlock } from "@/components/Spinner";
 
 export default function TrafficPage() {
   const { adminKey } = useAuth();
@@ -87,9 +88,7 @@ export default function TrafficPage() {
       )}
 
       {loading && summaries === null ? (
-        <div className="rounded-xl border border-slate-200 bg-white p-10 text-center text-sm text-slate-500">
-          Chargement du trafic...
-        </div>
+        <LoadingBlock label="Chargement du trafic..." />
       ) : summaries && summaries.length === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center text-sm text-slate-500">
           Aucune requête enregistrée au cours des dernières 24 heures.

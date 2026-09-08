@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { useToast } from "@/lib/toast-context";
 import { ApiError, setConfigValue, type ConfigKey, type ConfigStatus } from "@/lib/api";
 
 /** Un champ de saisie pour une clé de configuration plateforme donnée. */
@@ -17,6 +18,7 @@ export function ConfigKeyField({
   onSaved: () => void;
 }) {
   const { adminKey } = useAuth();
+  const { showToast } = useToast();
   const [value, setValue] = useState(status.value ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -39,13 +41,15 @@ export function ConfigKeyField({
       setSaved(true);
       if (secret) setValue("");
       onSaved();
+      showToast(`${label} enregistrée.`, "success");
       setTimeout(() => setSaved(false), 2000);
     } catch (err) {
-      setError(
+      const message =
         err instanceof ApiError
           ? err.message
-          : "Impossible d'enregistrer cette valeur."
-      );
+          : "Impossible d'enregistrer cette valeur.";
+      setError(message);
+      showToast(message, "error");
     } finally {
       setSaving(false);
     }

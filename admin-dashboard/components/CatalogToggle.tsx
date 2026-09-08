@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { useToast } from "@/lib/toast-context";
 import {
   ApiError,
   getTenantFeatures,
@@ -17,6 +18,7 @@ import {
  */
 export function CatalogToggle({ tenantId }: { tenantId: string }) {
   const { adminKey } = useAuth();
+  const { showToast } = useToast();
   const [enabled, setEnabled] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -57,12 +59,14 @@ export function CatalogToggle({ tenantId }: { tenantId: string }) {
     try {
       await updateTenantFeatures(adminKey, tenantId, { catalog_enabled: next });
       setEnabled(next);
+      showToast(next ? "Catalogue activé." : "Catalogue désactivé.", "success");
     } catch (err) {
-      setError(
+      const message =
         err instanceof ApiError
           ? err.message
-          : "Impossible de mettre à jour le catalogue."
-      );
+          : "Impossible de mettre à jour le catalogue.";
+      setError(message);
+      showToast(message, "error");
     } finally {
       setSaving(false);
     }
