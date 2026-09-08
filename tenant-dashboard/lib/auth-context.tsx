@@ -11,14 +11,21 @@ import {
   clearStoredApiKey,
   getStoredApiKey,
   listOrders,
+  staffLogin,
   storeApiKey,
 } from "./api";
 
 interface AuthContextValue {
-  /** Clé API tenant actuellement utilisée, ou null si non connecté. */
+  /** Credential tenant actuellement utilisée (clé API ou JWT), ou null si non connecté. */
   apiKey: string | null;
-  /** Tente une connexion avec la clé fournie ; lève une erreur si invalide. */
+  /** Connexion via la clé X-API-Key (intégration technique). */
   login: (key: string) => Promise<void>;
+  /** Connexion via identifiant boutique + email/mot de passe (compte personnel). */
+  loginWithPassword: (
+    tenantSlug: string,
+    email: string,
+    password: string
+  ) => Promise<void>;
   logout: () => void;
 }
 
@@ -62,13 +69,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     notifyApiKeyChanged();
   }, []);
 
+  const loginWithPassword = useCallback(
+    async (tenantSlug: string, email: string, password: string) => {
+      const token = await staffLogin(tenantSlug.trim(), email.trim(), password);
+      storeApiKey(token);
+      notifyApiKeyChanged();
+    },
+    []
+  );
+
   const logout = useCallback(() => {
     clearStoredApiKey();
     notifyApiKeyChanged();
   }, []);
 
   return (
-    <AuthContext.Provider value={{ apiKey, login, logout }}>
+    <AuthContext.Provider value={{ apiKey, login, loginWithPassword, logout }}>
       {children}
     </AuthContext.Provider>
   );

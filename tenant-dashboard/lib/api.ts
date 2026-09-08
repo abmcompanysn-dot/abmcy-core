@@ -285,11 +285,20 @@ export class ApiError extends Error {
   }
 }
 
+/** Un JWT a toujours exactement deux points ; une clé X-API-Key statique jamais. */
+function isJwt(credential: string): boolean {
+  return (credential.match(/\./g) ?? []).length === 2;
+}
+
 async function request<T>(
   path: string,
   apiKey: string,
   init?: RequestInit
 ): Promise<T> {
+  const authHeaders: Record<string, string> = isJwt(apiKey)
+    ? { Authorization: `Bearer ${apiKey}` }
+    : { "X-API-Key": apiKey };
+
   let res: Response;
   try {
     res = await fetch(`${API_URL}${path}`, {
@@ -298,7 +307,7 @@ async function request<T>(
         ...(init?.body instanceof FormData
           ? {}
           : { "Content-Type": "application/json" }),
-        "X-API-Key": apiKey,
+        ...authHeaders,
         ...(init?.headers ?? {}),
       },
       cache: "no-store",
@@ -343,6 +352,49 @@ async function request<T>(
   }
 
   return (await res.json()) as T;
+}
+
+/**
+ * POST /auth/login — échange identifiant boutique + email/mot de passe
+ * contre un JWT personnel. N'utilise pas request() : à ce stade on n'a
+ * encore aucune credential à envoyer, c'est cet appel qui en produit une.
+ */
+export async function staffLogin(
+  tenantSlug: string,
+  email: string,
+  password: string
+): Promise<string> {
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tenant_slug: tenantSlug, email, password }),
+      cache: "no-store",
+    });
+  } catch {
+    throw new ApiError(
+      0,
+      "Impossible de contacter le serveur. Vérifiez l'URL de l'API et votre connexion."
+    );
+  }
+
+  if (!res.ok) {
+    let body: ApiErrorBody | null = null;
+    try {
+      body = await res.json();
+    } catch {
+      // corps non-JSON ou vide
+    }
+    throw new ApiError(
+      res.status,
+      body?.error?.message || "Identifiant boutique, email ou mot de passe incorrect.",
+      body?.error?.code
+    );
+  }
+
+  const { token } = (await res.json()) as { token: string };
+  return token;
 }
 
 /** GET /orders — liste les commandes du tenant connecté. */
