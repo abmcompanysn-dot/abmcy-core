@@ -47,6 +47,29 @@ type Tenant struct {
 	RateLimitPerSec   int       `json:"rate_limit_per_sec"`
 	RateLimitBurst    int       `json:"rate_limit_burst"`
 	IsActive          bool      `json:"is_active"`
+
+	// Profil public — ce qu'un tenant affiche sur son propre site/dashboard,
+	// distinct de ce qui sert le fonctionnement interne de la plateforme
+	// ci-dessus. Tous optionnels : un tenant peut fonctionner sans jamais
+	// les renseigner.
+	ContactName  string `json:"contact_name,omitempty"`
+	ContactPhone string `json:"contact_phone,omitempty"`
+	ContactRole  string `json:"contact_role,omitempty"`
+	LogoURL      string `json:"logo_url,omitempty"`
+	BrandColor   string `json:"brand_color,omitempty"`
+	Tagline      string `json:"tagline,omitempty"`
+	Language     string `json:"language"`
+}
+
+// Social is one social/contact link a tenant displays publicly (Instagram,
+// TikTok, WhatsApp...). A tenant can have more than one of the same type —
+// HANI'S has two WhatsApp numbers, for example — so this is its own table
+// rather than a single column per platform.
+type Social struct {
+	ID       uuid.UUID `json:"id"`
+	Type     string    `json:"type"`
+	URL      string    `json:"url"`
+	Position int       `json:"position"`
 }
 
 type Service struct {
@@ -103,10 +126,12 @@ func (s *Service) Create(ctx context.Context, name, slug, contactEmail, business
 		row := tx.QueryRow(ctx, `
 			INSERT INTO tenants (name, slug, contact_email, api_key_public, api_key_secret_hash, business_type)
 			VALUES ($1, $2, $3, $4, $5, $6)
-			RETURNING id, name, slug, coalesce(contact_email, ''), api_key_public, plan, business_type, storage_limit_bytes, storage_used_bytes, email_quota_per_day, rate_limit_per_sec, rate_limit_burst, is_active
+			RETURNING id, name, slug, coalesce(contact_email, ''), api_key_public, plan, business_type, storage_limit_bytes, storage_used_bytes, email_quota_per_day, rate_limit_per_sec, rate_limit_burst, is_active,
+				coalesce(contact_name, ''), coalesce(contact_phone, ''), coalesce(contact_role, ''), coalesce(logo_url, ''), coalesce(brand_color, ''), coalesce(tagline, ''), language
 		`, name, slug, contactEmail, pubKey, string(secretHash), businessType)
 		return row.Scan(&t.ID, &t.Name, &t.Slug, &t.ContactEmail, &t.APIKeyPublic, &t.Plan, &t.BusinessType,
-			&t.StorageLimitBytes, &t.StorageUsedBytes, &t.EmailQuotaPerDay, &t.RateLimitPerSec, &t.RateLimitBurst, &t.IsActive)
+			&t.StorageLimitBytes, &t.StorageUsedBytes, &t.EmailQuotaPerDay, &t.RateLimitPerSec, &t.RateLimitBurst, &t.IsActive,
+			&t.ContactName, &t.ContactPhone, &t.ContactRole, &t.LogoURL, &t.BrandColor, &t.Tagline, &t.Language)
 	})
 	if err != nil {
 		return nil, fmt.Errorf("tenant: create: %w", err)
@@ -141,7 +166,8 @@ func (s *Service) ListAll(ctx context.Context) ([]Tenant, error) {
 	var tenants []Tenant
 	err := s.pool.WithSystem(ctx, func(ctx context.Context, tx db.TxLike) error {
 		rows, err := tx.Query(ctx, `
-			SELECT id, name, slug, coalesce(contact_email, ''), api_key_public, plan, business_type, storage_limit_bytes, storage_used_bytes, email_quota_per_day, rate_limit_per_sec, rate_limit_burst, is_active
+			SELECT id, name, slug, coalesce(contact_email, ''), api_key_public, plan, business_type, storage_limit_bytes, storage_used_bytes, email_quota_per_day, rate_limit_per_sec, rate_limit_burst, is_active,
+				coalesce(contact_name, ''), coalesce(contact_phone, ''), coalesce(contact_role, ''), coalesce(logo_url, ''), coalesce(brand_color, ''), coalesce(tagline, ''), language
 			FROM tenants ORDER BY created_at DESC
 		`)
 		if err != nil {
@@ -151,7 +177,8 @@ func (s *Service) ListAll(ctx context.Context) ([]Tenant, error) {
 		for rows.Next() {
 			var t Tenant
 			if err := rows.Scan(&t.ID, &t.Name, &t.Slug, &t.ContactEmail, &t.APIKeyPublic, &t.Plan, &t.BusinessType,
-				&t.StorageLimitBytes, &t.StorageUsedBytes, &t.EmailQuotaPerDay, &t.RateLimitPerSec, &t.RateLimitBurst, &t.IsActive); err != nil {
+				&t.StorageLimitBytes, &t.StorageUsedBytes, &t.EmailQuotaPerDay, &t.RateLimitPerSec, &t.RateLimitBurst, &t.IsActive,
+				&t.ContactName, &t.ContactPhone, &t.ContactRole, &t.LogoURL, &t.BrandColor, &t.Tagline, &t.Language); err != nil {
 				return err
 			}
 			tenants = append(tenants, t)
@@ -159,6 +186,108 @@ func (s *Service) ListAll(ctx context.Context) ([]Tenant, error) {
 		return rows.Err()
 	})
 	return tenants, err
+}
+
+// UpdateProfileInput mirrors catalog.UpdateProductInput's pattern: every
+// field is a pointer, nil means "leave unchanged" (PATCH semantics).
+type UpdateProfileInput struct {
+	ContactName  *string
+	ContactPhone *string
+	ContactRole  *string
+	LogoURL      *string
+	BrandColor   *string
+	Tagline      *string
+	Language     *string
+}
+
+// UpdateProfile lets the super-admin dashboard (or, later, a tenant's own
+// settings page) fill in the public-facing identity — logo, brand color,
+// contact — that Create leaves empty by default.
+func (s *Service) UpdateProfile(ctx context.Context, tenantID uuid.UUID, in UpdateProfileInput) (*Tenant, error) {
+	var t Tenant
+	err := s.pool.WithSystem(ctx, func(ctx context.Context, tx db.TxLike) error {
+		row := tx.QueryRow(ctx, `
+			UPDATE tenants SET
+				contact_name = coalesce($2, contact_name),
+				contact_phone = coalesce($3, contact_phone),
+				contact_role = coalesce($4, contact_role),
+				logo_url = coalesce($5, logo_url),
+				brand_color = coalesce($6, brand_color),
+				tagline = coalesce($7, tagline),
+				language = coalesce($8, language),
+				updated_at = now()
+			WHERE id = $1
+			RETURNING id, name, slug, coalesce(contact_email, ''), api_key_public, plan, business_type, storage_limit_bytes, storage_used_bytes, email_quota_per_day, rate_limit_per_sec, rate_limit_burst, is_active,
+				coalesce(contact_name, ''), coalesce(contact_phone, ''), coalesce(contact_role, ''), coalesce(logo_url, ''), coalesce(brand_color, ''), coalesce(tagline, ''), language
+		`, tenantID, in.ContactName, in.ContactPhone, in.ContactRole, in.LogoURL, in.BrandColor, in.Tagline, in.Language)
+		if err := row.Scan(&t.ID, &t.Name, &t.Slug, &t.ContactEmail, &t.APIKeyPublic, &t.Plan, &t.BusinessType,
+			&t.StorageLimitBytes, &t.StorageUsedBytes, &t.EmailQuotaPerDay, &t.RateLimitPerSec, &t.RateLimitBurst, &t.IsActive,
+			&t.ContactName, &t.ContactPhone, &t.ContactRole, &t.LogoURL, &t.BrandColor, &t.Tagline, &t.Language); err != nil {
+			return apierror.ErrNotFound
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &t, nil
+}
+
+// ListSocials returns a tenant's social/contact links, ordered for
+// display (position, then insertion order).
+func (s *Service) ListSocials(ctx context.Context, tenantID uuid.UUID) ([]Social, error) {
+	var socials []Social
+	err := s.pool.WithTenant(ctx, tenantID, func(ctx context.Context, tx db.TxLike) error {
+		rows, err := tx.Query(ctx, `
+			SELECT id, type, url, position FROM tenant_socials
+			WHERE tenant_id = $1 ORDER BY position, created_at
+		`, tenantID)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var soc Social
+			if err := rows.Scan(&soc.ID, &soc.Type, &soc.URL, &soc.Position); err != nil {
+				return err
+			}
+			socials = append(socials, soc)
+		}
+		return rows.Err()
+	})
+	return socials, err
+}
+
+// ReplaceSocials swaps a tenant's entire social link list for a new one —
+// simpler and safer than diffing individual add/remove/reorder operations
+// for what's normally a short, infrequently-edited list.
+func (s *Service) ReplaceSocials(ctx context.Context, tenantID uuid.UUID, socials []Social) ([]Social, error) {
+	var result []Social
+	err := s.pool.WithTenant(ctx, tenantID, func(ctx context.Context, tx db.TxLike) error {
+		if _, err := tx.Exec(ctx, `DELETE FROM tenant_socials WHERE tenant_id = $1`, tenantID); err != nil {
+			return err
+		}
+		for i, soc := range socials {
+			if soc.Type == "" || soc.URL == "" {
+				return apierror.ErrValidation
+			}
+			var inserted Social
+			row := tx.QueryRow(ctx, `
+				INSERT INTO tenant_socials (tenant_id, type, url, position)
+				VALUES ($1, $2, $3, $4)
+				RETURNING id, type, url, position
+			`, tenantID, soc.Type, soc.URL, i)
+			if err := row.Scan(&inserted.ID, &inserted.Type, &inserted.URL, &inserted.Position); err != nil {
+				return err
+			}
+			result = append(result, inserted)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("tenant: replace socials: %w", err)
+	}
+	return result, nil
 }
 
 // UpdateQuota lets the super-admin adjust a tenant's storage limit —

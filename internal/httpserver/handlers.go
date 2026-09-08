@@ -13,6 +13,7 @@ import (
 	authmw "github.com/abmcy/core/internal/middleware"
 	"github.com/abmcy/core/internal/order"
 	"github.com/abmcy/core/internal/platformconfig"
+	"github.com/abmcy/core/internal/tenant"
 	"github.com/abmcy/core/pkg/apierror"
 	"github.com/abmcy/core/pkg/response"
 	"github.com/go-chi/chi/v5"
@@ -552,6 +553,89 @@ func (s *Server) handleAdminUpdateBusinessType(w http.ResponseWriter, r *http.Re
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleAdminUpdateTenantProfile(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := parseUUID(chi.URLParam(r, "tenantID"))
+	if err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+
+	var body struct {
+		ContactName  *string `json:"contact_name"`
+		ContactPhone *string `json:"contact_phone"`
+		ContactRole  *string `json:"contact_role"`
+		LogoURL      *string `json:"logo_url"`
+		BrandColor   *string `json:"brand_color"`
+		Tagline      *string `json:"tagline"`
+		Language     *string `json:"language"`
+	}
+	if err := decodeJSON(r, &body); err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+
+	t, err := s.tenants.UpdateProfile(r.Context(), tenantID, tenant.UpdateProfileInput{
+		ContactName:  body.ContactName,
+		ContactPhone: body.ContactPhone,
+		ContactRole:  body.ContactRole,
+		LogoURL:      body.LogoURL,
+		BrandColor:   body.BrandColor,
+		Tagline:      body.Tagline,
+		Language:     body.Language,
+	})
+	if err != nil {
+		response.Err(w, err)
+		return
+	}
+	response.JSON(w, http.StatusOK, t)
+}
+
+func (s *Server) handleAdminListTenantSocials(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := parseUUID(chi.URLParam(r, "tenantID"))
+	if err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+
+	socials, err := s.tenants.ListSocials(r.Context(), tenantID)
+	if err != nil {
+		response.Err(w, err)
+		return
+	}
+	response.JSON(w, http.StatusOK, socials)
+}
+
+func (s *Server) handleAdminSetTenantSocials(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := parseUUID(chi.URLParam(r, "tenantID"))
+	if err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+
+	var body struct {
+		Socials []struct {
+			Type string `json:"type"`
+			URL  string `json:"url"`
+		} `json:"socials"`
+	}
+	if err := decodeJSON(r, &body); err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+
+	in := make([]tenant.Social, len(body.Socials))
+	for i, soc := range body.Socials {
+		in[i] = tenant.Social{Type: soc.Type, URL: soc.URL}
+	}
+
+	socials, err := s.tenants.ReplaceSocials(r.Context(), tenantID, in)
+	if err != nil {
+		response.Err(w, err)
+		return
+	}
+	response.JSON(w, http.StatusOK, socials)
 }
 
 func (s *Server) handleAdminUpdateRateLimit(w http.ResponseWriter, r *http.Request) {
