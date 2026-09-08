@@ -13,6 +13,27 @@ function thumbnailFor(product: Product): string | null {
   return typeof fromAttrs === "string" ? fromAttrs : null;
 }
 
+// attributes est un JSON libre : une valeur peut être une simple chaîne,
+// un tableau de chaînes (tailles), ou un tableau d'objets (colors:
+// [{name, hex}]) — .join() sur ce dernier cas produit "[object Object]",
+// donc chaque élément est formaté individuellement plutôt que joint tel
+// quel.
+function formatAttributeValue(value: unknown): string {
+  if (Array.isArray(value)) {
+    return value.map(formatAttributeValue).join(", ");
+  }
+  if (value && typeof value === "object") {
+    // Cas fréquent : {name, hex} pour une couleur — affiche le nom si
+    // présent, sinon une représentation lisible du reste.
+    const obj = value as Record<string, unknown>;
+    if (typeof obj.name === "string") return obj.name;
+    return Object.values(obj)
+      .filter((v) => typeof v === "string" || typeof v === "number")
+      .join(" ");
+  }
+  return String(value);
+}
+
 export function ProductsTable({ products }: { products: Product[] }) {
   if (products.length === 0) {
     return (
@@ -61,9 +82,9 @@ export function ProductsTable({ products }: { products: Product[] }) {
                 )}
               </td>
               <td className="px-4 py-3 text-slate-900">
-                <div className="font-medium">{product.name}</div>
+                <div className="max-w-xs font-medium">{product.name}</div>
                 {product.description && (
-                  <div className="mt-0.5 max-w-xs text-xs text-slate-500">
+                  <div className="mt-0.5 line-clamp-2 max-w-xs text-xs text-slate-500">
                     {product.description}
                   </div>
                 )}
@@ -92,10 +113,7 @@ export function ProductsTable({ products }: { products: Product[] }) {
                           key={key}
                           className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600"
                         >
-                          {key}:{" "}
-                          {Array.isArray(value)
-                            ? value.join(", ")
-                            : String(value)}
+                          {key}: {formatAttributeValue(value)}
                         </span>
                       ))}
                     </div>

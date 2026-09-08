@@ -31,7 +31,7 @@ export function FabricsGallery({ fabrics }: { fabrics: Fabric[] }) {
             </div>
           )}
           <div className="space-y-1 p-3">
-            <p className="truncate text-sm font-medium text-slate-900">
+            <p className="line-clamp-2 text-sm font-medium text-slate-900">
               {fabric.name}
             </p>
             {fabric.description && (

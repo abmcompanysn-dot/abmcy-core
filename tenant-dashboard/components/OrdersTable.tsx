@@ -34,7 +34,7 @@ export function OrdersTable({ orders }: { orders: Order[] }) {
               key={order.id}
               className="border-b border-slate-100 last:border-0 hover:bg-slate-50"
             >
-              <td className="px-4 py-3 font-mono text-xs text-slate-700">
+              <td className="px-4 py-3 whitespace-nowrap font-mono text-xs text-slate-700">
                 <Link
                   href={`/commandes/${order.id}`}
                   className="text-indigo-600 hover:underline"
@@ -42,22 +42,22 @@ export function OrdersTable({ orders }: { orders: Order[] }) {
                   {order.order_number}
                 </Link>
               </td>
-              <td className="px-4 py-3 text-slate-900">
+              <td className="px-4 py-3 whitespace-nowrap text-slate-900">
                 {order.customer_name}
               </td>
-              <td className="px-4 py-3 text-slate-600">
+              <td className="px-4 py-3 whitespace-nowrap text-slate-600">
                 {order.customer_phone}
               </td>
-              <td className="px-4 py-3 font-medium text-slate-900">
+              <td className="px-4 py-3 whitespace-nowrap font-medium text-slate-900">
                 {formatFCFA(order.total_amount)}
               </td>
-              <td className="px-4 py-3">
+              <td className="px-4 py-3 whitespace-nowrap">
                 <OrderStatusBadge status={order.status} />
               </td>
-              <td className="px-4 py-3 text-slate-500">
+              <td className="px-4 py-3 whitespace-nowrap text-slate-500">
                 {formatDate(order.created_at)}
               </td>
-              <td className="px-4 py-3 text-right">
+              <td className="px-4 py-3 whitespace-nowrap text-right">
                 <div className="flex flex-col items-end gap-2">
                   <Link
                     href={`/commandes/${order.id}`}
