@@ -18,6 +18,9 @@ import {
 interface AuthContextValue {
   /** Credential admin actuellement utilisée (JWT ou clé statique), ou null si non connecté. */
   adminKey: string | null;
+  /** Email du compte connecté par mot de passe — null si connexion par X-Admin-Key
+   *  (ce mode n'est rattaché à aucun compte précis) ou si non connecté. */
+  adminEmail: string | null;
   /** Connexion via la clé X-Admin-Key statique (secours bootstrap). */
   login: (key: string) => Promise<void>;
   /** Connexion via email/mot de passe (compte créé avec POST /admin/accounts). */
@@ -26,6 +29,8 @@ interface AuthContextValue {
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
+
+const ADMIN_EMAIL_STORAGE_KEY = "abmcy_admin_email";
 
 // La clé admin vit dans le localStorage du navigateur, une source externe
 // à React. useSyncExternalStore lit cette source de façon sûre pour
@@ -47,10 +52,24 @@ function getServerSnapshot(): string | null {
   return null;
 }
 
+function getStoredAdminEmail(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage.getItem(ADMIN_EMAIL_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const adminKey = useSyncExternalStore(
     subscribe,
     getStoredAdminKey,
+    getServerSnapshot
+  );
+  const adminEmail = useSyncExternalStore(
+    subscribe,
+    getStoredAdminEmail,
     getServerSnapshot
   );
 
@@ -62,22 +81,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Vérifie la clé en appelant un endpoint protégé.
     await listTenants(trimmed);
     storeAdminKey(trimmed);
+    try {
+      window.localStorage.removeItem(ADMIN_EMAIL_STORAGE_KEY);
+    } catch {
+      // ignore
+    }
     notifyAdminKeyChanged();
   }, []);
 
   const loginWithPassword = useCallback(async (email: string, password: string) => {
-    const token = await adminLogin(email.trim(), password);
+    const trimmedEmail = email.trim();
+    const token = await adminLogin(trimmedEmail, password);
     storeAdminKey(token);
+    try {
+      window.localStorage.setItem(ADMIN_EMAIL_STORAGE_KEY, trimmedEmail);
+    } catch {
+      // ignore
+    }
     notifyAdminKeyChanged();
   }, []);
 
   const logout = useCallback(() => {
     clearStoredAdminKey();
+    try {
+      window.localStorage.removeItem(ADMIN_EMAIL_STORAGE_KEY);
+    } catch {
+      // ignore
+    }
     notifyAdminKeyChanged();
   }, []);
 
   return (
-    <AuthContext.Provider value={{ adminKey, login, loginWithPassword, logout }}>
+    <AuthContext.Provider
+      value={{ adminKey, adminEmail, login, loginWithPassword, logout }}
+    >
       {children}
     </AuthContext.Provider>
   );
