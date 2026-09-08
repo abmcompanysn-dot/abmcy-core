@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { useToast } from "@/lib/toast-context";
 import { ApiError, updateOrder, type Order } from "@/lib/api";
 
 const EDITABLE_STATUSES = ["pending", "confirmed"];
@@ -18,6 +19,7 @@ export function EditOrderForm({
   onUpdated: (order: Order) => void;
 }) {
   const { apiKey } = useAuth();
+  const { showToast } = useToast();
   const [shippingAddress, setShippingAddress] = useState(
     order.shipping_address ?? ""
   );
@@ -56,6 +58,7 @@ export function EditOrderForm({
       });
       onUpdated(updated);
       setSuccess(true);
+      showToast("Commande mise à jour avec succès.");
     } catch (err) {
       setError(
         err instanceof ApiError
