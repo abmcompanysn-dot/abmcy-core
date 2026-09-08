@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { BusinessType, Tenant } from "@/lib/api";
 import { StorageBar } from "./StorageBar";
 import { StatusBadge } from "./StatusBadge";
@@ -36,6 +37,7 @@ export function TenantsTable({
             <th className="px-4 py-3 font-medium">Limite de trafic</th>
             <th className="px-4 py-3 font-medium">Type de commerce</th>
             <th className="px-4 py-3 font-medium">Catalogue</th>
+            <th className="px-4 py-3 font-medium">Profil</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
@@ -85,6 +87,14 @@ export function TenantsTable({
               </td>
               <td className="px-4 py-3">
                 <CatalogToggle tenantId={t.id} />
+              </td>
+              <td className="px-4 py-3">
+                <Link
+                  href={`/tenants/${t.id}`}
+                  className="text-sm font-medium text-indigo-600 hover:underline"
+                >
+                  Voir / modifier
+                </Link>
               </td>
             </tr>
           ))}

@@ -82,6 +82,33 @@ export interface Tenant {
   rate_limit_per_sec: number;
   rate_limit_burst: number;
   is_active: boolean;
+  // Profil public — logo, contact, identité de marque affichée sur le
+  // site/dashboard du tenant. Tous optionnels.
+  contact_name?: string;
+  contact_phone?: string;
+  contact_role?: string;
+  logo_url?: string;
+  brand_color?: string;
+  tagline?: string;
+  language: string;
+}
+
+export interface TenantSocial {
+  id: string;
+  type: string;
+  url: string;
+  position: number;
+}
+
+export interface UpdateTenantProfileInput {
+  contact_email?: string;
+  contact_name?: string;
+  contact_phone?: string;
+  contact_role?: string;
+  logo_url?: string;
+  brand_color?: string;
+  tagline?: string;
+  language?: string;
 }
 
 /** Indicateurs de fonctionnalités optionnelles d'un tenant (GET/PUT features). */
@@ -300,6 +327,50 @@ export function updateTenantBusinessType(
     {
       method: "PUT",
       body: JSON.stringify({ business_type: businessType }),
+    }
+  );
+}
+
+/** PUT /admin/tenants/{tenantID}/profile — modifie le profil public d'un tenant (logo, contact, marque). */
+export function updateTenantProfile(
+  adminKey: string,
+  tenantId: string,
+  input: UpdateTenantProfileInput
+): Promise<Tenant> {
+  return request<Tenant>(
+    `/admin/tenants/${encodeURIComponent(tenantId)}/profile`,
+    adminKey,
+    {
+      method: "PUT",
+      body: JSON.stringify(input),
+    }
+  );
+}
+
+/** GET /admin/tenants/{tenantID}/socials — liste les liens sociaux d'un tenant. */
+export function listTenantSocials(
+  adminKey: string,
+  tenantId: string
+): Promise<TenantSocial[]> {
+  return request<TenantSocial[]>(
+    `/admin/tenants/${encodeURIComponent(tenantId)}/socials`,
+    adminKey,
+    { method: "GET" }
+  );
+}
+
+/** PUT /admin/tenants/{tenantID}/socials — remplace la liste complète des liens sociaux d'un tenant. */
+export function setTenantSocials(
+  adminKey: string,
+  tenantId: string,
+  socials: { type: string; url: string }[]
+): Promise<TenantSocial[]> {
+  return request<TenantSocial[]>(
+    `/admin/tenants/${encodeURIComponent(tenantId)}/socials`,
+    adminKey,
+    {
+      method: "PUT",
+      body: JSON.stringify({ socials }),
     }
   );
 }

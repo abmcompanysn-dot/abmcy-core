@@ -563,6 +563,7 @@ func (s *Server) handleAdminUpdateTenantProfile(w http.ResponseWriter, r *http.R
 	}
 
 	var body struct {
+		ContactEmail *string `json:"contact_email"`
 		ContactName  *string `json:"contact_name"`
 		ContactPhone *string `json:"contact_phone"`
 		ContactRole  *string `json:"contact_role"`
@@ -577,6 +578,7 @@ func (s *Server) handleAdminUpdateTenantProfile(w http.ResponseWriter, r *http.R
 	}
 
 	t, err := s.tenants.UpdateProfile(r.Context(), tenantID, tenant.UpdateProfileInput{
+		ContactEmail: body.ContactEmail,
 		ContactName:  body.ContactName,
 		ContactPhone: body.ContactPhone,
 		ContactRole:  body.ContactRole,

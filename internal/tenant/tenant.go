@@ -191,6 +191,7 @@ func (s *Service) ListAll(ctx context.Context) ([]Tenant, error) {
 // UpdateProfileInput mirrors catalog.UpdateProductInput's pattern: every
 // field is a pointer, nil means "leave unchanged" (PATCH semantics).
 type UpdateProfileInput struct {
+	ContactEmail *string
 	ContactName  *string
 	ContactPhone *string
 	ContactRole  *string
@@ -208,6 +209,7 @@ func (s *Service) UpdateProfile(ctx context.Context, tenantID uuid.UUID, in Upda
 	err := s.pool.WithSystem(ctx, func(ctx context.Context, tx db.TxLike) error {
 		row := tx.QueryRow(ctx, `
 			UPDATE tenants SET
+				contact_email = coalesce($9, contact_email),
 				contact_name = coalesce($2, contact_name),
 				contact_phone = coalesce($3, contact_phone),
 				contact_role = coalesce($4, contact_role),
@@ -219,7 +221,7 @@ func (s *Service) UpdateProfile(ctx context.Context, tenantID uuid.UUID, in Upda
 			WHERE id = $1
 			RETURNING id, name, slug, coalesce(contact_email, ''), api_key_public, plan, business_type, storage_limit_bytes, storage_used_bytes, email_quota_per_day, rate_limit_per_sec, rate_limit_burst, is_active,
 				coalesce(contact_name, ''), coalesce(contact_phone, ''), coalesce(contact_role, ''), coalesce(logo_url, ''), coalesce(brand_color, ''), coalesce(tagline, ''), language
-		`, tenantID, in.ContactName, in.ContactPhone, in.ContactRole, in.LogoURL, in.BrandColor, in.Tagline, in.Language)
+		`, tenantID, in.ContactName, in.ContactPhone, in.ContactRole, in.LogoURL, in.BrandColor, in.Tagline, in.Language, in.ContactEmail)
 		if err := row.Scan(&t.ID, &t.Name, &t.Slug, &t.ContactEmail, &t.APIKeyPublic, &t.Plan, &t.BusinessType,
 			&t.StorageLimitBytes, &t.StorageUsedBytes, &t.EmailQuotaPerDay, &t.RateLimitPerSec, &t.RateLimitBurst, &t.IsActive,
 			&t.ContactName, &t.ContactPhone, &t.ContactRole, &t.LogoURL, &t.BrandColor, &t.Tagline, &t.Language); err != nil {
