@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { useToast } from "@/lib/toast-context";
 import { ApiError, createOrder, type Order } from "@/lib/api";
 
 interface ExtraField {
@@ -22,6 +23,7 @@ export function NewOrderForm({
   onCreated: (order: Order) => void;
 }) {
   const { apiKey } = useAuth();
+  const { showToast } = useToast();
   const [open, setOpen] = useState(false);
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
@@ -107,6 +109,7 @@ export function NewOrderForm({
             : undefined,
       });
       onCreated(order);
+      showToast(`Commande ${order.order_number} créée avec succès.`);
       resetForm();
       setOpen(false);
     } catch (err) {
