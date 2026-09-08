@@ -1,10 +1,24 @@
+"use client";
+
+import { useState } from "react";
 import Link from "next/link";
 import type { Order } from "@/lib/api";
 import { formatDate, formatFCFA } from "@/lib/format";
-import { OrderStatusBadge } from "./OrderStatusBadge";
+import { OrderStatusSelect } from "./OrderStatusSelect";
 import { PaymentButton } from "./PaymentButton";
 
 export function OrdersTable({ orders }: { orders: Order[] }) {
+  // Recouvrement local des statuts mis à jour inline (OrderStatusSelect) :
+  // évite d'attendre un rechargement complet de la liste par le parent
+  // pour refléter le changement. Réinitialisé implicitement à chaque fois
+  // que la liste de commandes reçue change de contenu, via la clé dérivée
+  // ci-dessous plutôt qu'un état à resynchroniser manuellement.
+  const [overrides, setOverrides] = useState<Record<string, Order>>({});
+
+  function handleUpdated(updated: Order) {
+    setOverrides((prev) => ({ ...prev, [updated.id]: updated }));
+  }
+
   if (orders.length === 0) {
     return (
       <div className="rounded-xl border border-slate-200 bg-white p-10 text-center text-sm text-slate-500">
@@ -29,7 +43,9 @@ export function OrdersTable({ orders }: { orders: Order[] }) {
           </tr>
         </thead>
         <tbody>
-          {orders.map((order) => (
+          {orders.map((order) => {
+            const current = overrides[order.id] ?? order;
+            return (
             <tr
               key={order.id}
               className="border-b border-slate-100 last:border-0 hover:bg-slate-50"
@@ -52,7 +68,7 @@ export function OrdersTable({ orders }: { orders: Order[] }) {
                 {formatFCFA(order.total_amount)}
               </td>
               <td className="px-4 py-3 whitespace-nowrap">
-                <OrderStatusBadge status={order.status} />
+                <OrderStatusSelect order={current} onUpdated={handleUpdated} />
               </td>
               <td className="px-4 py-3 whitespace-nowrap text-slate-500">
                 {formatDate(order.created_at)}
@@ -65,11 +81,12 @@ export function OrdersTable({ orders }: { orders: Order[] }) {
                   >
                     Voir le détail
                   </Link>
-                  <PaymentButton order={order} />
+                  <PaymentButton order={current} />
                 </div>
               </td>
             </tr>
-          ))}
+            );
+          })}
         </tbody>
       </table>
     </div>

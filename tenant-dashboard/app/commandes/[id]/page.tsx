@@ -7,11 +7,15 @@ import {
   ApiError,
   getOrder,
   getOrderHistory,
+  listFabrics,
+  type Fabric,
   type Order,
   type OrderStatusEvent,
 } from "@/lib/api";
+import { useFeatures } from "@/lib/features-context";
 import { formatDate, formatFCFA } from "@/lib/format";
 import { OrderStatusBadge } from "@/components/OrderStatusBadge";
+import { OrderStatusSelect } from "@/components/OrderStatusSelect";
 import { OrderHistoryTimeline } from "@/components/OrderHistoryTimeline";
 import { EditOrderForm } from "@/components/EditOrderForm";
 import { PaymentButton } from "@/components/PaymentButton";
@@ -29,8 +33,21 @@ export default function OrderDetailPage({
 }) {
   const { id } = use(params);
   const { apiKey } = useAuth();
+  const { features } = useFeatures();
   const [order, setOrder] = useState<Order | null>(null);
   const [history, setHistory] = useState<OrderStatusEvent[] | null>(null);
+  // Résultat de la résolution du nom de tissu, gardé avec l'ID de tissu
+  // pour lequel il a été calculé — évite un setState synchrone de
+  // "réinitialisation" dans l'effet ci-dessous (voir même principe que
+  // "loading" plus haut, déconseillé par react-hooks/set-state-in-effect).
+  const [fabricNameResult, setFabricNameResult] = useState<{
+    fabricId: string;
+    name: string | null;
+  } | null>(null);
+  const fabricName =
+    order?.fabric_id && fabricNameResult?.fabricId === order.fabric_id
+      ? fabricNameResult.name
+      : null;
   const [error, setError] = useState<string | null>(null);
   // "loading" est dérivé de la comparaison entre la dernière requête
   // déclenchée et la dernière requête traitée, plutôt que mis à jour de
@@ -66,6 +83,39 @@ export default function OrderDetailPage({
       cancelled = true;
     };
   }, [apiKey, id, reloadToken]);
+
+  // Résout le nom du tissu choisi (fabric_id) une fois la commande
+  // chargée — Order ne porte que l'ID, pas le nom. Uniquement pertinent
+  // si le catalogue est activé pour ce tenant (sinon /fabrics n'existe pas).
+  useEffect(() => {
+    if (!apiKey || !order?.fabric_id || !features?.catalog_enabled) {
+      return;
+    }
+    const fabricId = order.fabric_id;
+    let cancelled = false;
+
+    listFabrics(apiKey)
+      .then((fabrics: Fabric[]) => {
+        if (cancelled) return;
+        const match = fabrics.find((f) => f.id === fabricId);
+        setFabricNameResult({ fabricId, name: match?.name ?? null });
+      })
+      .catch(() => {
+        if (!cancelled) setFabricNameResult({ fabricId, name: null });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [apiKey, order?.fabric_id, features?.catalog_enabled]);
+
+  function handleStatusUpdated(updated: Order) {
+    setOrder(updated);
+    // Le nouvel événement de statut vient d'être écrit côté serveur dans
+    // order_status_history — on relance le chargement pour que la
+    // timeline le reflète, plutôt que de reconstruire l'événement ici.
+    setReloadToken((t) => t + 1);
+  }
 
   return (
     <div className="space-y-6">
@@ -107,7 +157,15 @@ export default function OrderDetailPage({
                 Créée le {formatDate(order.created_at)}
               </p>
             </div>
-            <PaymentButton order={order} />
+            <div className="flex items-center gap-3">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-500">
+                  Changer le statut
+                </label>
+                <OrderStatusSelect order={order} onUpdated={handleStatusUpdated} />
+              </div>
+              <PaymentButton order={order} />
+            </div>
           </div>
 
           <div className="grid gap-6 lg:grid-cols-2">
@@ -157,6 +215,11 @@ export default function OrderDetailPage({
                       <dd className="text-right text-slate-900">
                         {FABRIC_SOURCE_LABELS[order.fabric_source] ??
                           order.fabric_source}
+                        {fabricName && (
+                          <span className="block text-xs text-slate-500">
+                            {fabricName}
+                          </span>
+                        )}
                       </dd>
                     </div>
                   )}

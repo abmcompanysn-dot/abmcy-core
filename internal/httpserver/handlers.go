@@ -134,6 +134,39 @@ func (s *Server) handleUpdateOrder(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, o)
 }
 
+// handleUpdateOrderStatus moves an order through the pipeline
+// (pending -> confirmed -> paid -> in_progress -> shipped -> delivered, or
+// cancelled at any point). Deliberately a separate route from
+// handleUpdateOrder: that one refuses edits once an order is no longer
+// pending/confirmed (order_not_editable), but changing the STATUS itself
+// must stay possible on a "locked" order — it's the action that advances
+// it. Keeping it as its own endpoint avoids complicating that lock check
+// with a field-by-field exception.
+func (s *Server) handleUpdateOrderStatus(w http.ResponseWriter, r *http.Request) {
+	t, _ := authmw.TenantFromContext(r.Context())
+	orderID, err := parseUUID(chi.URLParam(r, "orderID"))
+	if err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+
+	var body struct {
+		Status  string `json:"status"`
+		Comment string `json:"comment"`
+	}
+	if err := decodeJSON(r, &body); err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+
+	o, err := s.orders.SetStatus(r.Context(), t.ID, orderID, body.Status, body.Comment)
+	if err != nil {
+		response.Err(w, err)
+		return
+	}
+	response.JSON(w, http.StatusOK, o)
+}
+
 func (s *Server) handleOrderHistory(w http.ResponseWriter, r *http.Request) {
 	t, _ := authmw.TenantFromContext(r.Context())
 	orderID, err := parseUUID(chi.URLParam(r, "orderID"))

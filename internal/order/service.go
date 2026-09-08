@@ -183,6 +183,55 @@ func (s *Service) UpdateStatus(ctx context.Context, tenantID, orderID uuid.UUID,
 	})
 }
 
+// ValidStatuses enumerates every status an order can be in (see
+// migrations/0001_init.sql, orders.status column comment) — used to
+// validate PATCH /orders/{id}/status input before writing it.
+var ValidStatuses = map[string]bool{
+	"pending":     true,
+	"confirmed":   true,
+	"paid":        true,
+	"in_progress": true,
+	"shipped":     true,
+	"delivered":   true,
+	"cancelled":   true,
+}
+
+// SetStatus changes an order's status directly — unlike Update, this is
+// allowed regardless of the order's current status: moving an order
+// through the pipeline (pending -> confirmed -> paid -> ...) is exactly
+// what should still be possible once the order is "locked" for ordinary
+// field edits (address/measurements/notes). Every change is recorded in
+// order_status_history, same as UpdateStatus (used by the CinetPay
+// webhook) — this is the tenant-dashboard-facing equivalent.
+func (s *Service) SetStatus(ctx context.Context, tenantID, orderID uuid.UUID, status, comment string) (*Order, error) {
+	if !ValidStatuses[status] {
+		return nil, apierror.New(422, "validation_error", "Statut de commande invalide.")
+	}
+
+	var o Order
+	err := s.pool.WithTenant(ctx, tenantID, func(ctx context.Context, tx db.TxLike) error {
+		row := tx.QueryRow(ctx, `
+			UPDATE orders SET status = $1, updated_at = now() WHERE id = $2
+			RETURNING id, order_number, customer_id, customer_name, customer_phone, coalesce(customer_email, ''),
+				coalesce(shipping_address, ''), total_amount, status, measurements, measurements_id, fabric_id,
+				coalesce(fabric_source, ''), coalesce(notes, ''), created_at
+		`, status, orderID)
+		if err := row.Scan(&o.ID, &o.OrderNumber, &o.CustomerID, &o.CustomerName, &o.CustomerPhone, &o.CustomerEmail,
+			&o.ShippingAddress, &o.TotalAmount, &o.Status, &o.Measurements, &o.MeasurementsID, &o.FabricID,
+			&o.FabricSource, &o.Notes, &o.CreatedAt); err != nil {
+			return err
+		}
+
+		_, err := tx.Exec(ctx, `INSERT INTO order_status_history (tenant_id, order_id, status, comment) VALUES ($1, $2, $3, nullif($4, ''))`,
+			tenantID, orderID, status, comment)
+		return err
+	})
+	if err != nil {
+		return nil, apierror.ErrNotFound
+	}
+	return &o, nil
+}
+
 type StatusEvent struct {
 	Status    string    `json:"status"`
 	Comment   string    `json:"comment,omitempty"`

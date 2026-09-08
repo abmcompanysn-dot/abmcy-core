@@ -1,18 +1,22 @@
 import type { OrderStatus } from "@/lib/api";
 
-const STATUS_LABELS: Record<string, string> = {
+export const STATUS_LABELS: Record<string, string> = {
   pending: "En attente",
+  confirmed: "Confirmée",
   paid: "Payée",
   in_progress: "En cours",
   shipped: "Expédiée",
+  delivered: "Livrée",
   cancelled: "Annulée",
 };
 
 const STATUS_STYLES: Record<string, string> = {
   pending: "bg-amber-50 text-amber-700",
+  confirmed: "bg-blue-50 text-blue-700",
   paid: "bg-emerald-50 text-emerald-700",
   in_progress: "bg-sky-50 text-sky-700",
   shipped: "bg-violet-50 text-violet-700",
+  delivered: "bg-teal-50 text-teal-700",
   cancelled: "bg-red-50 text-red-700",
 };
 

@@ -162,6 +162,7 @@ func (s *Server) routes(rl *authmw.RateLimit) {
 		r.Get("/orders", s.handleListOrders)
 		r.Get("/orders/{orderID}", s.handleGetOrder)
 		r.Patch("/orders/{orderID}", s.handleUpdateOrder)
+		r.Patch("/orders/{orderID}/status", s.handleUpdateOrderStatus)
 		r.Get("/orders/{orderID}/history", s.handleOrderHistory)
 		r.Post("/custom-orders", s.handleCreateCustomOrder)
 		r.Post("/measurements", s.handleSaveMeasurements)
@@ -182,10 +183,13 @@ func (s *Server) routes(rl *authmw.RateLimit) {
 
 			r.Get("/fabrics", s.handleListFabrics)
 			r.Post("/fabrics", s.handleCreateFabric)
+			r.Patch("/fabrics/{fabricID}", s.handleUpdateFabric)
 			r.Post("/fabrics/upload", s.handleUploadFabricPhoto)
 
 			r.Get("/gallery", s.handleListGallery)
 			r.Post("/gallery", s.handleAddGalleryPhoto)
+			r.Patch("/gallery/{photoID}", s.handleUpdateGalleryPhoto)
+			r.Delete("/gallery/{photoID}", s.handleDeleteGalleryPhoto)
 
 			r.Get("/cart", s.handleGetCart)
 			r.Post("/cart", s.handleAddCartItem)
@@ -195,6 +199,7 @@ func (s *Server) routes(rl *authmw.RateLimit) {
 			r.Get("/reviews", s.handleListPublishedReviews)
 			r.Get("/reviews/pending", s.handleListPendingReviews)
 			r.Post("/reviews/{reviewID}/publish", s.handlePublishReview)
+			r.Delete("/reviews/{reviewID}", s.handleDeleteReview)
 		})
 	})
 

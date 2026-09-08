@@ -45,11 +45,25 @@ export function clearStoredApiKey(): void {
 
 export type OrderStatus =
   | "pending"
+  | "confirmed"
   | "paid"
   | "in_progress"
   | "shipped"
+  | "delivered"
   | "cancelled"
   | string;
+
+/** Toutes les valeurs valides pour PATCH /orders/{id}/status (voir
+ * internal/order/service.go ValidStatuses, même énumération). */
+export const ORDER_STATUSES: OrderStatus[] = [
+  "pending",
+  "confirmed",
+  "paid",
+  "in_progress",
+  "shipped",
+  "delivered",
+  "cancelled",
+];
 
 export interface Order {
   id: string;
@@ -151,6 +165,20 @@ export interface Product {
   images?: ProductImage[];
 }
 
+/** PATCH /products/{id} — tous les champs sont optionnels (fusion côté
+ * serveur, celui non fourni n'est pas modifié). */
+export interface UpdateProductInput {
+  name?: string;
+  description?: string;
+  price?: number;
+  category?: string;
+  sku?: string;
+  stock_quantity?: number | null;
+  attributes?: Record<string, unknown>;
+  is_featured?: boolean;
+  is_active?: boolean;
+}
+
 export interface CreateProductInput {
   name: string;
   description?: string;
@@ -183,6 +211,15 @@ export interface CreateFabricInput {
   image_url?: string;
 }
 
+/** PATCH /fabrics/{id} — champs optionnels, fusion côté serveur. */
+export interface UpdateFabricInput {
+  name?: string;
+  description?: string;
+  extra_price?: number;
+  image_url?: string;
+  is_active?: boolean;
+}
+
 export type GalleryCategory = "femme" | "homme" | "sur_mesure" | "artisanat";
 
 export interface GalleryPhoto {
@@ -194,6 +231,14 @@ export interface GalleryPhoto {
 
 export interface AddGalleryPhotoInput {
   image_url: string;
+  category?: GalleryCategory | string;
+  caption?: string;
+}
+
+/** PATCH /gallery/{id} — champs optionnels, fusion côté serveur.
+ * L'image elle-même n'est pas modifiable (supprimer/recréer la photo
+ * plutôt que de remplacer l'URL). */
+export interface UpdateGalleryPhotoInput {
   category?: GalleryCategory | string;
   caption?: string;
 }
@@ -237,6 +282,25 @@ export interface CreateReviewInput {
   rating: number;
   comment?: string;
   photo_urls?: string[];
+}
+
+// --- Personnel tenant (comptes individuels, gestion d'équipe) -----------
+//
+// Routes réservées au JWT staff (voir requireStaffJWT côté backend) — une
+// intégration X-API-Key n'a pas d'identité humaine, donc pas accès à
+// /staff. Le rôle "owner" est requis pour créer/désactiver un membre.
+
+export interface StaffUser {
+  id: string;
+  email: string;
+  role: "owner" | "staff" | string;
+  is_active: boolean;
+}
+
+export interface CreateStaffInput {
+  email: string;
+  password: string;
+  role?: "owner" | "staff";
 }
 
 export interface UploadedImage {
@@ -284,9 +348,29 @@ export class ApiError extends Error {
   }
 }
 
-/** Un JWT a toujours exactement deux points ; une clé X-API-Key statique jamais. */
-function isJwt(credential: string): boolean {
+/** Un JWT a toujours exactement deux points ; une clé X-API-Key statique
+ * jamais. Exporté : lib/auth-context.tsx s'en sert pour savoir si la
+ * session courante est une connexion personnelle (JWT staff, donne accès
+ * à /staff, /auth/logout) ou juste la clé API technique. */
+export function isJwt(credential: string): boolean {
   return (credential.match(/\./g) ?? []).length === 2;
+}
+
+/** Lit le rôle ("owner" | "staff") depuis le payload d'un JWT staff, sans
+ * vérifier sa signature — uniquement pour adapter l'affichage (ex: montrer
+ * le bouton "Ajouter un membre" seulement aux owners) ; le backend est la
+ * seule source de vérité pour l'autorisation réelle (voir handleCreateStaff,
+ * qui revérifie t.StaffRole == "owner" indépendamment de ce que montre
+ * l'interface). Renvoie null si le jeton n'est pas décodable. */
+export function decodeStaffRole(token: string): string | null {
+  try {
+    const [, payload] = token.split(".");
+    const json = atob(payload.replace(/-/g, "+").replace(/_/g, "/"));
+    const claims = JSON.parse(json) as { role?: string };
+    return claims.role ?? null;
+  } catch {
+    return null;
+  }
 }
 
 async function request<T>(
@@ -430,6 +514,24 @@ export function updateOrder(
   });
 }
 
+/** PATCH /orders/{id}/status — change le statut d'une commande (fait
+ * avancer le pipeline pending -> confirmed -> paid -> in_progress ->
+ * shipped -> delivered, ou cancelled à tout moment). Contrairement à
+ * updateOrder(), reste possible même sur une commande "verrouillée"
+ * (plus pending/confirmed) : c'est justement l'action qui la fait
+ * avancer. Route dédiée côté backend pour cette raison. */
+export function updateOrderStatus(
+  apiKey: string,
+  orderId: string,
+  status: OrderStatus,
+  comment?: string
+): Promise<Order> {
+  return request<Order>(`/orders/${orderId}/status`, apiKey, {
+    method: "PATCH",
+    body: JSON.stringify({ status, comment }),
+  });
+}
+
 /** GET /orders/{id}/history — historique des statuts d'une commande. */
 export function getOrderHistory(
   apiKey: string,
@@ -470,13 +572,18 @@ export function getFeatures(apiKey: string): Promise<Features> {
 }
 
 /** POST /uploads/image — envoie une image (multipart/form-data). */
+/** productId optionnel : quand fourni, l'image est directement rattachée
+ * à ce produit (product_images, voir GET /products/{id}.images) plutôt
+ * que de rester une image "libre" à relier manuellement plus tard. */
 export function uploadImage(
   apiKey: string,
-  file: File
+  file: File,
+  productId?: string
 ): Promise<UploadedImage> {
   const form = new FormData();
   form.append("image", file);
-  return request<UploadedImage>("/uploads/image", apiKey, {
+  const qs = productId ? `?product_id=${encodeURIComponent(productId)}` : "";
+  return request<UploadedImage>(`/uploads/image${qs}`, apiKey, {
     method: "POST",
     body: form,
   });
@@ -536,6 +643,19 @@ export function getProduct(apiKey: string, productId: string): Promise<Product> 
   return request<Product>(`/products/${productId}`, apiKey, { method: "GET" });
 }
 
+/** PATCH /products/{id} — met à jour un produit existant (champs fournis
+ * uniquement, fusion côté serveur). */
+export function updateProduct(
+  apiKey: string,
+  productId: string,
+  input: UpdateProductInput
+): Promise<Product> {
+  return request<Product>(`/products/${productId}`, apiKey, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
 // --- Catalogue (tissus) -------------------------------------------------
 
 /** GET /fabrics — liste les tissus du tenant. */
@@ -550,6 +670,19 @@ export function createFabric(
 ): Promise<Fabric> {
   return request<Fabric>("/fabrics", apiKey, {
     method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+/** PATCH /fabrics/{id} — met à jour un tissu existant (champs fournis
+ * uniquement, fusion côté serveur). */
+export function updateFabric(
+  apiKey: string,
+  fabricId: string,
+  input: UpdateFabricInput
+): Promise<Fabric> {
+  return request<Fabric>(`/fabrics/${fabricId}`, apiKey, {
+    method: "PATCH",
     body: JSON.stringify(input),
   });
 }
@@ -587,6 +720,26 @@ export function addGalleryPhoto(
     method: "POST",
     body: JSON.stringify(input),
   });
+}
+
+/** PATCH /gallery/{id} — modifie la catégorie/légende d'une photo. */
+export function updateGalleryPhoto(
+  apiKey: string,
+  photoId: string,
+  input: UpdateGalleryPhotoInput
+): Promise<GalleryPhoto> {
+  return request<GalleryPhoto>(`/gallery/${photoId}`, apiKey, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+/** DELETE /gallery/{id} — supprime une photo mal importée. */
+export function deleteGalleryPhoto(
+  apiKey: string,
+  photoId: string
+): Promise<void> {
+  return request<void>(`/gallery/${photoId}`, apiKey, { method: "DELETE" });
 }
 
 // --- Catalogue (panier) --------------------------------------------------
@@ -651,6 +804,54 @@ export function listPendingReviews(apiKey: string): Promise<Review[]> {
 export function publishReview(apiKey: string, reviewId: string): Promise<void> {
   return request<void>(`/reviews/${reviewId}/publish`, apiKey, {
     method: "POST",
+  });
+}
+
+/** DELETE /reviews/{id} — rejette/supprime un avis (le schéma n'a pas de
+ * statut "rejeté" distinct — voir internal/catalog/reviews.go Delete). */
+export function deleteReview(apiKey: string, reviewId: string): Promise<void> {
+  return request<void>(`/reviews/${reviewId}`, apiKey, { method: "DELETE" });
+}
+
+// --- Personnel tenant (gestion d'équipe) ---------------------------------
+//
+// Réservées au JWT staff (voir requireStaffJWT côté backend) — une
+// connexion par clé API n'a pas d'identité humaine et reçoit
+// staff_login_required (403) sur ces routes.
+
+/** POST /auth/logout — révoque le JWT staff courant (vrai logout, voir
+ * internal/auth/service.go Logout). Sans effet sur une session par clé
+ * API (rien à révoquer). */
+export function staffLogout(apiKey: string): Promise<void> {
+  return request<void>("/auth/logout", apiKey, { method: "POST" });
+}
+
+/** GET /staff — liste les membres de l'équipe du tenant connecté. */
+export function listStaff(apiKey: string): Promise<StaffUser[]> {
+  return request<StaffUser[]>("/staff", apiKey, { method: "GET" });
+}
+
+/** POST /staff — ajoute un membre de l'équipe (réservé au rôle owner). */
+export function createStaff(
+  apiKey: string,
+  input: CreateStaffInput
+): Promise<StaffUser> {
+  return request<StaffUser>("/staff", apiKey, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+/** PUT /staff/{userID}/active — active/désactive un membre de l'équipe
+ * (réservé au rôle owner). */
+export function setStaffActive(
+  apiKey: string,
+  userId: string,
+  isActive: boolean
+): Promise<void> {
+  return request<void>(`/staff/${userId}/active`, apiKey, {
+    method: "PUT",
+    body: JSON.stringify({ is_active: isActive }),
   });
 }
 
