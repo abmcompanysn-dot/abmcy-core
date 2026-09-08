@@ -297,16 +297,26 @@ minuit. Au-delà, l'erreur `email_quota_exceeded` (`429`) est renvoyée.
 
 ## Catalogue (optionnel)
 
-Le catalogue (produits, tissus, panier, galerie, avis) est une
-fonctionnalité **activée à la demande** par ABMCY pour votre compte — si
-elle n'est pas encore activée, toutes les routes de cette section renvoient
-`catalog_not_enabled` (`403`). Vérifiez votre statut :
+Le catalogue regroupe cinq services **indépendants**, chacun activé à la
+demande par ABMCY selon votre activité : produits, tissus, panier, galerie,
+avis. Un atelier de couture sur-mesure a par exemple `products_enabled`,
+`fabrics_enabled` et `gallery_enabled` sans `cart_enabled` (les commandes
+passent par `/custom-orders`, pas un panier classique). Si un service n'est
+pas activé, ses routes renvoient un `403` avec un code dédié :
+`products_not_enabled`, `fabrics_not_enabled`, `cart_not_enabled`,
+`gallery_not_enabled` ou `reviews_not_enabled`. Vérifiez votre statut :
 
 ```http
 GET /features
 ```
 ```json
-{ "catalog_enabled": true }
+{
+  "products_enabled": true,
+  "fabrics_enabled": true,
+  "cart_enabled": false,
+  "gallery_enabled": true,
+  "reviews_enabled": true
+}
 ```
 
 ### Produits
@@ -466,7 +476,11 @@ POST /auth/logout                             # déconnexion (révoque le token)
 | `customer_not_found` | 404 | Aucun profil client pour ce téléphone |
 | `unknown_config_key` | 404 | Clé de configuration inconnue |
 | `validation_error` | 422 | Données invalides ou incomplètes |
-| `catalog_not_enabled` | 403 | Le catalogue n'est pas activé pour ce compte |
+| `products_not_enabled` | 403 | Le service produits n'est pas activé pour ce compte |
+| `fabrics_not_enabled` | 403 | Le service tissus n'est pas activé pour ce compte |
+| `cart_not_enabled` | 403 | Le service panier n'est pas activé pour ce compte |
+| `gallery_not_enabled` | 403 | Le service galerie n'est pas activé pour ce compte |
+| `reviews_not_enabled` | 403 | Le service avis n'est pas activé pour ce compte |
 | `order_not_editable` | 409 | La commande n'est plus modifiable |
 | `invalid_or_expired_token` | 400 | Lien de réinitialisation invalide ou expiré |
 | `file_too_large` | 413 | Fichier de plus de 25 Mo |

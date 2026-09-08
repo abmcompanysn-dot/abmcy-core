@@ -124,7 +124,7 @@ function GaleriePageContent() {
 
 export default function GaleriePage() {
   return (
-    <CatalogGate>
+    <CatalogGate feature="gallery_enabled">
       <GaleriePageContent />
     </CatalogGate>
   );

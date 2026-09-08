@@ -90,15 +90,24 @@ Domaines confirmés (2026-09-07, `cors.abmcy.com` réaffecté le 2026-09-08) :
   (`GET /admin/traffic`, `/admin/traffic/{tenantID}`). Pas encore de purge
   automatique — `traffic.Service.PurgeOlderThan` existe mais n'est appelée
   par aucun job planifié pour l'instant.
-- **Service catalogue optionnel, opt-in par tenant** (décidé le 2026-09-07,
-  sur demande explicite — un tenant qui vend déjà via WhatsApp/en boutique
-  n'a pas forcément besoin d'un catalogue public). Table `tenant_features`
-  (`catalog_enabled`, défaut `false`), activée/désactivée depuis le
-  dashboard admin via `PUT /admin/tenants/{id}/features`. Toutes les
-  routes catalogue (`internal/catalog`) passent par le middleware
-  `requireCatalog` (voir `internal/httpserver/server.go`) qui renvoie un
-  403 clair (`catalog_not_enabled`) si le tenant n'a pas activé la
-  fonctionnalité. Le tenant peut vérifier son propre statut via
+- **Service catalogue optionnel, opt-in par tenant, en 5 services
+  indépendants** (décidé le 2026-09-07, découplé en 5 flags le
+  2026-09-08 sur demande explicite — un tenant de couture sur-mesure
+  veut typiquement produits+tissus+galerie+avis sans panier classique,
+  puisque ses commandes passent par `/custom-orders`). Table
+  `tenant_features` (`products_enabled`, `fabrics_enabled`,
+  `cart_enabled`, `gallery_enabled`, `reviews_enabled`, tous `false` par
+  défaut), activés/désactivés indépendamment depuis le dashboard admin
+  via `PUT /admin/tenants/{id}/features`. Chaque groupe de routes
+  catalogue (`internal/catalog`) passe par son propre middleware
+  (`requireProducts`, `requireFabrics`, `requireCart`, `requireGallery`,
+  `requireReviews` — voir `internal/httpserver/server.go`) qui renvoie un
+  403 clair (`xxx_not_enabled`) si CE service précis n'est pas activé —
+  les quatre autres restent indépendants. Un nouveau tenant reçoit un
+  préréglage selon son `business_type` à la création
+  (`features.PresetFor` : couture → produits+tissus+galerie+avis ;
+  général/numérique → produits+panier+avis ; autre → rien), modifiable
+  ensuite à la main. Le tenant peut vérifier son propre statut via
   `GET /features`. Inspiré d'un exemple concret donné par l'utilisateur
   pour HANI'S (produits, tissus, panier, mesures sur-mesure, galerie,
   avis) — voir `internal/catalog/` : `products.go`, `fabrics.go`,

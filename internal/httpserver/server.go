@@ -170,31 +170,44 @@ func (s *Server) routes(rl *authmw.RateLimit) {
 		r.Post("/payments/init", s.handleInitPayment)
 		r.Post("/notifications/email", s.handleSendEmail)
 
-		// Service catalogue — opt-in par tenant (voir internal/features).
-		// Un tenant sans le catalogue activé reçoit un 403 clair sur
-		// toutes ces routes plutôt qu'un comportement à moitié fonctionnel.
+		// Catalogue — cinq services indépendants (internal/features), chacun
+		// opt-in par tenant. Un tenant sans un service donné activé reçoit un
+		// 403 clair sur SES routes uniquement plutôt qu'un comportement à
+		// moitié fonctionnel — les cinq gates remplacent l'ancien
+		// requireCatalog qui verrouillait tout d'un bloc.
 		r.Group(func(r chi.Router) {
-			r.Use(s.requireCatalog)
-
+			r.Use(s.requireProducts)
 			r.Get("/products", s.handleListProducts)
 			r.Post("/products", s.handleCreateProduct)
 			r.Get("/products/{productID}", s.handleGetProduct)
 			r.Patch("/products/{productID}", s.handleUpdateProduct)
+		})
 
+		r.Group(func(r chi.Router) {
+			r.Use(s.requireFabrics)
 			r.Get("/fabrics", s.handleListFabrics)
 			r.Post("/fabrics", s.handleCreateFabric)
 			r.Patch("/fabrics/{fabricID}", s.handleUpdateFabric)
 			r.Post("/fabrics/upload", s.handleUploadFabricPhoto)
+		})
 
+		r.Group(func(r chi.Router) {
+			r.Use(s.requireGallery)
 			r.Get("/gallery", s.handleListGallery)
 			r.Post("/gallery", s.handleAddGalleryPhoto)
 			r.Patch("/gallery/{photoID}", s.handleUpdateGalleryPhoto)
 			r.Delete("/gallery/{photoID}", s.handleDeleteGalleryPhoto)
+		})
 
+		r.Group(func(r chi.Router) {
+			r.Use(s.requireCart)
 			r.Get("/cart", s.handleGetCart)
 			r.Post("/cart", s.handleAddCartItem)
 			r.Delete("/cart/{itemID}", s.handleRemoveCartItem)
+		})
 
+		r.Group(func(r chi.Router) {
+			r.Use(s.requireReviews)
 			r.Post("/reviews", s.handleCreateReview)
 			r.Get("/reviews", s.handleListPublishedReviews)
 			r.Get("/reviews/pending", s.handleListPendingReviews)
@@ -232,10 +245,54 @@ func (s *Server) routes(rl *authmw.RateLimit) {
 	})
 }
 
-func (s *Server) requireCatalog(next http.Handler) http.Handler {
+func (s *Server) requireProducts(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t, _ := authmw.TenantFromContext(r.Context())
-		if err := s.features.RequireCatalog(r.Context(), t.ID); err != nil {
+		if err := s.features.RequireProducts(r.Context(), t.ID); err != nil {
+			response.Err(w, err)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (s *Server) requireFabrics(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t, _ := authmw.TenantFromContext(r.Context())
+		if err := s.features.RequireFabrics(r.Context(), t.ID); err != nil {
+			response.Err(w, err)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (s *Server) requireGallery(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t, _ := authmw.TenantFromContext(r.Context())
+		if err := s.features.RequireGallery(r.Context(), t.ID); err != nil {
+			response.Err(w, err)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (s *Server) requireCart(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t, _ := authmw.TenantFromContext(r.Context())
+		if err := s.features.RequireCart(r.Context(), t.ID); err != nil {
+			response.Err(w, err)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (s *Server) requireReviews(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t, _ := authmw.TenantFromContext(r.Context())
+		if err := s.features.RequireReviews(r.Context(), t.ID); err != nil {
 			response.Err(w, err)
 			return
 		}

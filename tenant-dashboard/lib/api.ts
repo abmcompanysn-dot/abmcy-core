@@ -137,9 +137,22 @@ export interface Measurement {
 
 // --- Fonctionnalités (feature flags) ---------------------------------
 
+/** Les cinq services catalogue, chacun activable indépendamment par tenant. */
 export interface Features {
-  catalog_enabled: boolean;
+  products_enabled: boolean;
+  fabrics_enabled: boolean;
+  cart_enabled: boolean;
+  gallery_enabled: boolean;
+  reviews_enabled: boolean;
 }
+
+export const FEATURE_LABELS: Record<keyof Features, string> = {
+  products_enabled: "Catalogue",
+  fabrics_enabled: "Tissus",
+  cart_enabled: "Panier",
+  gallery_enabled: "Galerie",
+  reviews_enabled: "Avis",
+};
 
 // --- Catalogue (optionnel, activé par tenant) ------------------------
 

@@ -97,7 +97,7 @@ function CataloguePageContent() {
 
 export default function CataloguePage() {
   return (
-    <CatalogGate>
+    <CatalogGate feature="products_enabled">
       <CataloguePageContent />
     </CatalogGate>
   );

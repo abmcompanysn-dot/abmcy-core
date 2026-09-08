@@ -86,9 +86,9 @@ export default function OrderDetailPage({
 
   // Résout le nom du tissu choisi (fabric_id) une fois la commande
   // chargée — Order ne porte que l'ID, pas le nom. Uniquement pertinent
-  // si le catalogue est activé pour ce tenant (sinon /fabrics n'existe pas).
+  // si le service tissus est activé pour ce tenant (sinon /fabrics n'existe pas).
   useEffect(() => {
-    if (!apiKey || !order?.fabric_id || !features?.catalog_enabled) {
+    if (!apiKey || !order?.fabric_id || !features?.fabrics_enabled) {
       return;
     }
     const fabricId = order.fabric_id;
@@ -107,7 +107,7 @@ export default function OrderDetailPage({
     return () => {
       cancelled = true;
     };
-  }, [apiKey, order?.fabric_id, features?.catalog_enabled]);
+  }, [apiKey, order?.fabric_id, features?.fabrics_enabled]);
 
   function handleStatusUpdated(updated: Order) {
     setOrder(updated);

@@ -111,10 +111,22 @@ export interface UpdateTenantProfileInput {
   language?: string;
 }
 
-/** Indicateurs de fonctionnalités optionnelles d'un tenant (GET/PUT features). */
+/** Les cinq services catalogue, chacun activable indépendamment par tenant. */
 export interface FeatureFlags {
-  catalog_enabled: boolean;
+  products_enabled: boolean;
+  fabrics_enabled: boolean;
+  cart_enabled: boolean;
+  gallery_enabled: boolean;
+  reviews_enabled: boolean;
 }
+
+export const FEATURE_LABELS: Record<keyof FeatureFlags, string> = {
+  products_enabled: "Produits",
+  fabrics_enabled: "Tissus",
+  cart_enabled: "Panier",
+  gallery_enabled: "Galerie",
+  reviews_enabled: "Avis",
+};
 
 export interface CreateTenantResponse {
   tenant: Tenant;

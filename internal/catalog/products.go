@@ -1,8 +1,10 @@
 // Package catalog implements the optional storefront layer on top of
 // orders: products, fabrics, a server-side cart, a photo gallery, and
-// customer reviews. Gated per-tenant by internal/features — every method
-// here assumes the caller (internal/httpserver) has already checked
-// features.RequireCatalog for the tenant.
+// customer reviews. Each of the five is gated independently per-tenant by
+// internal/features (RequireProducts, RequireFabrics, RequireCart,
+// RequireGallery, RequireReviews) — every method here assumes the caller
+// (internal/httpserver) has already checked the matching gate for the
+// tenant.
 //
 // The product model is business-agnostic on purpose: name/description/
 // price/category/images are common to any storefront, while sector-

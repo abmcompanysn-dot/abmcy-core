@@ -137,7 +137,7 @@ function AvisPageContent() {
 
 export default function AvisPage() {
   return (
-    <CatalogGate>
+    <CatalogGate feature="reviews_enabled">
       <AvisPageContent />
     </CatalogGate>
   );

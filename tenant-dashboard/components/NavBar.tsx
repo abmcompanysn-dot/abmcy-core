@@ -4,19 +4,21 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { useFeatures } from "@/lib/features-context";
-import { DOCS_URL } from "@/lib/api";
+import { DOCS_URL, type Features } from "@/lib/api";
 
 const baseLinks = [{ href: "/", label: "Commandes" }];
 
-// Ces onglets dépendent du feature flag catalog_enabled (voir GET
-// /features) : un tenant qui n'a pas le catalogue activé ne doit pas
+// Chaque onglet catalogue dépend de son propre feature flag (voir GET
+// /features) : un tenant qui n'a pas ce service activé ne doit pas
 // pouvoir y accéder, pour éviter de cliquer dans le vide sur des routes
-// qui renvoient 403 catalog_not_enabled.
-const catalogLinks = [
-  { href: "/catalogue", label: "Catalogue" },
-  { href: "/tissus", label: "Tissus" },
-  { href: "/galerie", label: "Galerie" },
-  { href: "/avis", label: "Avis" },
+// qui renvoient un 403 xxx_not_enabled. Les cinq services sont
+// indépendants — un tenant peut par exemple avoir Catalogue et Galerie
+// sans Panier.
+const catalogLinks: { href: string; label: string; feature: keyof Features }[] = [
+  { href: "/catalogue", label: "Catalogue", feature: "products_enabled" },
+  { href: "/tissus", label: "Tissus", feature: "fabrics_enabled" },
+  { href: "/galerie", label: "Galerie", feature: "gallery_enabled" },
+  { href: "/avis", label: "Avis", feature: "reviews_enabled" },
 ];
 
 const trailingLinks = [
@@ -31,10 +33,11 @@ export function NavBar() {
 
   if (!apiKey) return null;
 
-  const catalogEnabled = features?.catalog_enabled ?? false;
+  const enabledCatalogLinks = catalogLinks.filter((l) => features?.[l.feature]);
+  const disabledCount = catalogLinks.length - enabledCatalogLinks.length;
   const links = [
     ...baseLinks,
-    ...(catalogEnabled ? catalogLinks : []),
+    ...enabledCatalogLinks,
     // Gestion d'équipe : réservée aux connexions par compte personnel
     // (JWT staff) — GET/POST /staff exigent requireStaffJWT côté
     // backend, une clé API technique n'a pas d'identité humaine.
@@ -67,12 +70,13 @@ export function NavBar() {
               </Link>
             );
           })}
-          {!catalogEnabled && (
+          {disabledCount > 0 && (
             <span
-              title="Catalogue non activé pour votre compte. Contactez ABMCY pour l'activer."
-              className="cursor-help rounded-md px-3 py-2 text-sm font-medium text-slate-300"
+              title="Contactez ABMCY pour activer d'autres services catalogue pour votre compte."
+              className="cursor-help rounded-md px-3 py-2 text-xs text-slate-300"
             >
-              Catalogue non activé
+              {disabledCount} service{disabledCount > 1 ? "s" : ""} non activé
+              {disabledCount > 1 ? "s" : ""}
             </span>
           )}
         </nav>
@@ -125,12 +129,13 @@ export function NavBar() {
               </Link>
             );
           })}
-          {!catalogEnabled && (
+          {disabledCount > 0 && (
             <span
-              title="Catalogue non activé pour votre compte. Contactez ABMCY pour l'activer."
-              className="flex shrink-0 cursor-help items-center rounded-md px-3 py-1.5 text-sm font-medium text-slate-300"
+              title="Contactez ABMCY pour activer d'autres services catalogue pour votre compte."
+              className="flex shrink-0 cursor-help items-center rounded-md px-3 py-1.5 text-xs text-slate-300"
             >
-              Catalogue non activé
+              {disabledCount} service{disabledCount > 1 ? "s" : ""} non activé
+              {disabledCount > 1 ? "s" : ""}
             </span>
           )}
           <a

@@ -51,10 +51,19 @@ export function FeaturesProvider({ children }: { children: ReactNode }) {
         if (!cancelled) setResult({ key: apiKey, features: data });
       })
       .catch(() => {
-        // En cas d'erreur, on suppose le catalogue désactivé plutôt que
-        // d'afficher des onglets qui échoueraient à l'usage.
+        // En cas d'erreur, on suppose tous les services désactivés plutôt
+        // que d'afficher des onglets qui échoueraient à l'usage.
         if (!cancelled) {
-          setResult({ key: apiKey, features: { catalog_enabled: false } });
+          setResult({
+            key: apiKey,
+            features: {
+              products_enabled: false,
+              fabrics_enabled: false,
+              cart_enabled: false,
+              gallery_enabled: false,
+              reviews_enabled: false,
+            },
+          });
         }
       });
 

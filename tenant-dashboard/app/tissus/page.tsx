@@ -98,7 +98,7 @@ function TissusPageContent() {
 
 export default function TissusPage() {
   return (
-    <CatalogGate>
+    <CatalogGate feature="fabrics_enabled">
       <TissusPageContent />
     </CatalogGate>
   );

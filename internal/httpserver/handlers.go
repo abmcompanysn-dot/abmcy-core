@@ -10,6 +10,7 @@ import (
 
 	"github.com/abmcy/core/internal/catalog"
 	"github.com/abmcy/core/internal/emailtemplate"
+	"github.com/abmcy/core/internal/features"
 	authmw "github.com/abmcy/core/internal/middleware"
 	"github.com/abmcy/core/internal/order"
 	"github.com/abmcy/core/internal/platformconfig"
@@ -536,6 +537,15 @@ func (s *Server) handleAdminCreateTenant(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	// Best-effort : un nouveau tenant part avec les services catalogue
+	// suggérés pour son business_type (voir features.PresetFor) plutôt que
+	// tout désactivé — l'admin peut toujours ajuster ensuite depuis la
+	// page Catalogue du dashboard. Un échec ici ne doit pas faire échouer
+	// la création du tenant, déjà en base à ce stade.
+	if err := s.features.ApplyPreset(r.Context(), result.Tenant.ID, result.Tenant.BusinessType); err != nil {
+		slog.Error("tenant feature preset failed to apply", "tenant_id", result.Tenant.ID, "error", err)
+	}
+
 	// Best-effort : ni la clé secrète ni le mot de passe du propriétaire ne
 	// sont envoyés par email (ils ne s'affichent qu'une fois dans le
 	// dashboard admin) — cet email confirme juste la création et oriente
@@ -772,10 +782,12 @@ func (s *Server) handleAdminUploadTenantLogo(w http.ResponseWriter, r *http.Requ
 	response.JSON(w, http.StatusCreated, img)
 }
 
-// handleAdminUpdateFeatures toggles opt-in tenant capabilities — right now
-// just the storefront catalog (products, fabrics, cart, gallery, reviews).
-// A tenant selling entirely over WhatsApp/in-store can stay without it;
-// ABMCY enables it per tenant from the dashboard once they're ready for it.
+// handleAdminUpdateFeatures toggles opt-in tenant capabilities — the
+// storefront catalog's five independent services (products, fabrics,
+// cart, gallery, reviews). A tenant selling entirely over WhatsApp/in-store
+// can leave all five off; ABMCY enables each one per tenant from the
+// dashboard once they're ready for it (see features.PresetFor for the
+// defaults applied at tenant creation).
 func (s *Server) handleAdminUpdateFeatures(w http.ResponseWriter, r *http.Request) {
 	tenantID, err := parseUUID(chi.URLParam(r, "tenantID"))
 	if err != nil {
@@ -783,15 +795,13 @@ func (s *Server) handleAdminUpdateFeatures(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	var body struct {
-		CatalogEnabled bool `json:"catalog_enabled"`
-	}
+	var body features.Flags
 	if err := decodeJSON(r, &body); err != nil {
 		response.Err(w, apierror.ErrValidation)
 		return
 	}
 
-	if err := s.features.SetCatalogEnabled(r.Context(), tenantID, body.CatalogEnabled); err != nil {
+	if err := s.features.Set(r.Context(), tenantID, body); err != nil {
 		response.Err(w, err)
 		return
 	}

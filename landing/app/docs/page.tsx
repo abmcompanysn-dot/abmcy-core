@@ -32,7 +32,11 @@ const ERROR_CODES: { code: string; status: string; meaning: string }[] = [
   { code: "customer_not_found", status: "404", meaning: "Aucun profil pour ce téléphone" },
   { code: "unknown_config_key", status: "404", meaning: "Clé de configuration inconnue" },
   { code: "validation_error", status: "422", meaning: "Données invalides ou incomplètes" },
-  { code: "catalog_not_enabled", status: "403", meaning: "Catalogue non activé pour ce compte" },
+  { code: "products_not_enabled", status: "403", meaning: "Service produits non activé pour ce compte" },
+  { code: "fabrics_not_enabled", status: "403", meaning: "Service tissus non activé pour ce compte" },
+  { code: "cart_not_enabled", status: "403", meaning: "Service panier non activé pour ce compte" },
+  { code: "gallery_not_enabled", status: "403", meaning: "Service galerie non activé pour ce compte" },
+  { code: "reviews_not_enabled", status: "403", meaning: "Service avis non activé pour ce compte" },
   { code: "order_not_editable", status: "409", meaning: "Commande plus modifiable" },
   { code: "invalid_or_expired_token", status: "400", meaning: "Lien de réinitialisation invalide/expiré" },
   { code: "file_too_large", status: "413", meaning: "Fichier > 25 Mo" },
@@ -397,11 +401,27 @@ image=@photo.jpg`}</pre>
                 <span className="docs-method get">GET</span>
                 <span className="docs-endpoint-path">/features</span>
               </div>
-              <pre className="docs-code-body">{`{ "catalog_enabled": true }`}</pre>
+              <pre className="docs-code-body">{`{
+  "products_enabled": true,
+  "fabrics_enabled": true,
+  "cart_enabled": false,
+  "gallery_enabled": true,
+  "reviews_enabled": true
+}`}</pre>
             </div>
             <p className="docs-op-note">
-              Si désactivé, ces routes renvoient{" "}
-              <span className="docs-err-code">catalog_not_enabled</span>.
+              Cinq services indépendants, chacun activable séparément selon
+              votre activité — un atelier de couture sur-mesure peut par
+              exemple avoir <code>products_enabled</code>,{" "}
+              <code>fabrics_enabled</code> et <code>gallery_enabled</code> sans{" "}
+              <code>cart_enabled</code> (les commandes passent par{" "}
+              <code>/custom-orders</code> plutôt qu&apos;un panier classique).
+              Si un service est désactivé, ses routes renvoient un 403 avec un
+              code dédié : <span className="docs-err-code">products_not_enabled</span>,{" "}
+              <span className="docs-err-code">fabrics_not_enabled</span>,{" "}
+              <span className="docs-err-code">cart_not_enabled</span>,{" "}
+              <span className="docs-err-code">gallery_not_enabled</span> ou{" "}
+              <span className="docs-err-code">reviews_not_enabled</span>.
             </p>
 
             <h3 className="docs-op-title">Produits — modèle générique</h3>
