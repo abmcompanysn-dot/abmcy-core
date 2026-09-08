@@ -10,14 +10,20 @@ import {
 import {
   clearStoredApiKey,
   getStoredApiKey,
+  isJwt,
   listOrders,
   staffLogin,
+  staffLogout,
   storeApiKey,
 } from "./api";
 
 interface AuthContextValue {
   /** Credential tenant actuellement utilisée (clé API ou JWT), ou null si non connecté. */
   apiKey: string | null;
+  /** true si la connexion actuelle est un JWT staff (email/mot de passe),
+   * false si c'est la clé API technique (X-API-Key). Détermine l'accès aux
+   * routes réservées au personnel identifié (ex: /staff, gestion d'équipe). */
+  isStaffSession: boolean;
   /** Connexion via la clé X-API-Key (intégration technique). */
   login: (key: string) => Promise<void>;
   /** Connexion via identifiant boutique + email/mot de passe (compte personnel). */
@@ -79,12 +85,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const logout = useCallback(() => {
+    // Révocation serveur du JWT (vrai logout, voir POST /auth/logout et
+    // internal/auth/service.go Logout) — best-effort : la déconnexion
+    // locale doit réussir même si l'appel réseau échoue (session déjà
+    // expirée, backend injoignable, etc.). Sans objet pour une session par
+    // clé API : rien à révoquer côté serveur.
+    const current = getStoredApiKey();
+    if (current && isJwt(current)) {
+      staffLogout(current).catch(() => {
+        // Ignoré volontairement — voir commentaire ci-dessus.
+      });
+    }
     clearStoredApiKey();
     notifyApiKeyChanged();
   }, []);
 
+  const isStaffSession = apiKey !== null && isJwt(apiKey);
+
   return (
-    <AuthContext.Provider value={{ apiKey, login, loginWithPassword, logout }}>
+    <AuthContext.Provider
+      value={{ apiKey, isStaffSession, login, loginWithPassword, logout }}
+    >
       {children}
     </AuthContext.Provider>
   );

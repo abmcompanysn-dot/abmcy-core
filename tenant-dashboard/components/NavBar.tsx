@@ -25,7 +25,7 @@ const trailingLinks = [
 ];
 
 export function NavBar() {
-  const { apiKey, logout } = useAuth();
+  const { apiKey, isStaffSession, logout } = useAuth();
   const { features } = useFeatures();
   const pathname = usePathname();
 
@@ -35,6 +35,10 @@ export function NavBar() {
   const links = [
     ...baseLinks,
     ...(catalogEnabled ? catalogLinks : []),
+    // Gestion d'équipe : réservée aux connexions par compte personnel
+    // (JWT staff) — GET/POST /staff exigent requireStaffJWT côté
+    // backend, une clé API technique n'a pas d'identité humaine.
+    ...(isStaffSession ? [{ href: "/equipe", label: "Équipe" }] : []),
     ...trailingLinks,
   ];
 
