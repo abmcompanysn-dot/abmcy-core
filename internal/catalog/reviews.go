@@ -128,3 +128,21 @@ func (s *ReviewService) Publish(ctx context.Context, tenantID, reviewID uuid.UUI
 		return nil
 	})
 }
+
+// Delete rejects/removes a review — the schema has no "rejected" status
+// (just is_published, default false), so "reject" is modeled as an
+// outright delete rather than inventing an unplanned status value. Works
+// on both pending and already-published reviews (a tenant may want to
+// pull down something that was published in error too).
+func (s *ReviewService) Delete(ctx context.Context, tenantID, reviewID uuid.UUID) error {
+	return s.pool.WithTenant(ctx, tenantID, func(ctx context.Context, tx db.TxLike) error {
+		tag, err := tx.Exec(ctx, `DELETE FROM reviews WHERE id = $1`, reviewID)
+		if err != nil {
+			return err
+		}
+		if tag.RowsAffected() == 0 {
+			return apierror.ErrNotFound
+		}
+		return nil
+	})
+}

@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useAuth } from "@/lib/auth-context";
-import { ApiError, publishReview, type Review } from "@/lib/api";
+import { useToast } from "@/lib/toast-context";
+import { ApiError, deleteReview, publishReview, type Review } from "@/lib/api";
 
 function Stars({ rating }: { rating: number }) {
   return (
@@ -16,11 +17,14 @@ function Stars({ rating }: { rating: number }) {
 export function ReviewCard({
   review,
   onPublished,
+  onDeleted,
 }: {
   review: Review;
   onPublished?: (review: Review) => void;
+  onDeleted?: (reviewId: string) => void;
 }) {
   const { apiKey } = useAuth();
+  const { showToast } = useToast();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -31,6 +35,7 @@ export function ReviewCard({
     try {
       await publishReview(apiKey, review.id);
       onPublished?.({ ...review, is_published: true });
+      showToast("Avis publié.");
     } catch (err) {
       setError(
         err instanceof ApiError ? err.message : "Impossible de publier l'avis."
@@ -40,19 +45,52 @@ export function ReviewCard({
     }
   }
 
+  async function handleReject() {
+    if (!apiKey) return;
+    const confirmMessage = review.is_published
+      ? "Retirer définitivement cet avis publié ?"
+      : "Rejeter et supprimer définitivement cet avis ?";
+    if (!window.confirm(confirmMessage)) return;
+
+    setError(null);
+    setLoading(true);
+    try {
+      await deleteReview(apiKey, review.id);
+      onDeleted?.(review.id);
+      showToast("Avis rejeté.");
+    } catch (err) {
+      setError(
+        err instanceof ApiError ? err.message : "Impossible de rejeter l'avis."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <Stars rating={review.rating} />
-        {!review.is_published && onPublished && (
-          <button
-            onClick={handlePublish}
-            disabled={loading}
-            className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {loading ? "Publication..." : "Publier"}
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {!review.is_published && onPublished && (
+            <button
+              onClick={handlePublish}
+              disabled={loading}
+              className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {loading ? "..." : "Publier"}
+            </button>
+          )}
+          {onDeleted && (
+            <button
+              onClick={handleReject}
+              disabled={loading}
+              className="rounded-md border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {review.is_published ? "Retirer" : "Rejeter"}
+            </button>
+          )}
+        </div>
       </div>
       {review.comment && (
         <p className="mt-2 text-sm text-slate-700">{review.comment}</p>

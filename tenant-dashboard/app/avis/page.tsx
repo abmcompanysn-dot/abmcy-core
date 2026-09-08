@@ -10,6 +10,7 @@ import {
 } from "@/lib/api";
 import { CatalogGate } from "@/components/CatalogGate";
 import { ReviewCard } from "@/components/ReviewCard";
+import { LoadingBlock } from "@/components/Spinner";
 
 function AvisPageContent() {
   const { apiKey } = useAuth();
@@ -57,6 +58,11 @@ function AvisPageContent() {
     setPublished((prev) => (prev ? [review, ...prev] : [review]));
   }
 
+  function handleDeleted(reviewId: string) {
+    setPending((prev) => prev?.filter((r) => r.id !== reviewId) ?? prev);
+    setPublished((prev) => prev?.filter((r) => r.id !== reviewId) ?? prev);
+  }
+
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between">
@@ -86,9 +92,7 @@ function AvisPageContent() {
           En attente de modération
         </h2>
         {loading && pending === null ? (
-          <div className="rounded-xl border border-slate-200 bg-white p-10 text-center text-sm text-slate-500">
-            Chargement...
-          </div>
+          <LoadingBlock />
         ) : pending && pending.length > 0 ? (
           <div className="grid gap-3 sm:grid-cols-2">
             {pending.map((review) => (
@@ -96,6 +100,7 @@ function AvisPageContent() {
                 key={review.id}
                 review={review}
                 onPublished={handlePublished}
+                onDeleted={handleDeleted}
               />
             ))}
           </div>
@@ -109,13 +114,15 @@ function AvisPageContent() {
       <section className="space-y-3">
         <h2 className="text-sm font-medium text-slate-700">Avis publiés</h2>
         {loading && published === null ? (
-          <div className="rounded-xl border border-slate-200 bg-white p-10 text-center text-sm text-slate-500">
-            Chargement...
-          </div>
+          <LoadingBlock />
         ) : published && published.length > 0 ? (
           <div className="grid gap-3 sm:grid-cols-2">
             {published.map((review) => (
-              <ReviewCard key={review.id} review={review} />
+              <ReviewCard
+                key={review.id}
+                review={review}
+                onDeleted={handleDeleted}
+              />
             ))}
           </div>
         ) : (
