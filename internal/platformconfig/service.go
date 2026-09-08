@@ -34,6 +34,13 @@ const (
 	KeyResendFromAddr    Key = "RESEND_FROM_ADDR"
 	KeyCinetPayAPIKey    Key = "CINETPAY_API_KEY"
 	KeyCinetPaySiteID    Key = "CINETPAY_SITE_ID"
+	// KeyCorsOrigins holds the comma-separated list of origins allowed to
+	// call the API from a browser (see httpserver.corsMiddleware) — each
+	// tenant's own storefront (e.g. https://hani.abmcy.com) needs to be
+	// added here before its site can call api.abmcy.com from JS. Falls
+	// back to the CORS_ORIGINS env var when never configured, so a fresh
+	// deploy still serves the two ABMCY-owned dashboards out of the box.
+	KeyCorsOrigins Key = "CORS_ORIGINS"
 )
 
 // AllKeys drives the dashboard's config form and input validation — any
@@ -42,6 +49,7 @@ var AllKeys = []Key{
 	KeyR2AccountID, KeyR2AccessKeyID, KeyR2SecretAccessKey, KeyR2Bucket, KeyR2PublicURL,
 	KeyResendAPIKey, KeyResendFromAddr,
 	KeyCinetPayAPIKey, KeyCinetPaySiteID,
+	KeyCorsOrigins,
 }
 
 // secretKeys never has its value echoed back to the dashboard once set —

@@ -104,7 +104,8 @@ export type ConfigKey =
   | "RESEND_API_KEY"
   | "RESEND_FROM_ADDR"
   | "CINETPAY_API_KEY"
-  | "CINETPAY_SITE_ID";
+  | "CINETPAY_SITE_ID"
+  | "CORS_ORIGINS";
 
 export interface ConfigStatus {
   key: ConfigKey;

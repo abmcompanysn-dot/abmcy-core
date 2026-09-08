@@ -39,6 +39,12 @@ const SERVICE_GROUPS: ServiceGroup[] = [
       { key: "CINETPAY_SITE_ID", label: "Site ID", secret: false },
     ],
   },
+  {
+    title: "Domaines autorisés (CORS)",
+    description:
+      "Sites autorisés à appeler l'API depuis un navigateur — liste séparée par des virgules, ex: https://dash.abmcy.com,https://hani.abmcy.com. Ajoutez ici le domaine du site de chaque tenant avant qu'il puisse afficher son catalogue.",
+    keys: [{ key: "CORS_ORIGINS", label: "Origines autorisées", secret: false }],
+  },
 ];
 
 export default function ServicesPage() {

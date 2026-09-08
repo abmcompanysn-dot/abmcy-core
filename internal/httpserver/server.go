@@ -47,8 +47,12 @@ type Server struct {
 	reviews      *catalog.ReviewService
 
 	publicBaseURL string
-	corsOrigins   []string
-	adminAPIKey   string
+	// corsOrigins is the CORS_ORIGINS env var, split — used only as a
+	// fallback for origins that have never been set in platform_config
+	// (fresh deploy, or before an operator has configured any tenant
+	// storefront domain). See corsMiddleware.
+	corsOrigins []string
+	adminAPIKey string
 }
 
 type Deps struct {
@@ -353,10 +357,21 @@ func customerFromContext(ctx context.Context) (*auth.CustomerClaims, bool) {
 	return c, ok
 }
 
+// allowedCorsOrigins prefers platform_config (editable from the admin
+// dashboard's Configuration page, live — no redeploy needed to onboard a
+// new tenant storefront) and falls back to the CORS_ORIGINS env var only
+// when that key has never been set.
+func (s *Server) allowedCorsOrigins() []string {
+	if v, ok := s.config.Get(platformconfig.KeyCorsOrigins); ok {
+		return strings.Split(v, ",")
+	}
+	return s.corsOrigins
+}
+
 func (s *Server) corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
-		for _, allowed := range s.corsOrigins {
+		for _, allowed := range s.allowedCorsOrigins() {
 			if strings.TrimSpace(allowed) == origin {
 				w.Header().Set("Access-Control-Allow-Origin", origin)
 				w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-API-Key")

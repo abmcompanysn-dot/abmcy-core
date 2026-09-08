@@ -31,7 +31,7 @@ type Config struct {
 	// it gates access to platform_config itself.
 	AdminAPIKey string
 
-	CorsOrigins string // comma separated, e.g. https://dash.abmcy.com,https://ad.abmcy.com
+	CorsOrigins string // comma separated, e.g. https://dash.abmcy.com,https://ad.abmcy.com,https://hani.abmcy.com
 }
 
 func Load() (*Config, error) {
@@ -45,7 +45,7 @@ func Load() (*Config, error) {
 		ConfigEncryptionKey: os.Getenv("CONFIG_ENCRYPTION_KEY"),
 		AdminAPIKey:         os.Getenv("ADMIN_API_KEY"),
 
-		CorsOrigins: getEnv("CORS_ORIGINS", "https://dash.abmcy.com,https://ad.abmcy.com"),
+		CorsOrigins: getEnv("CORS_ORIGINS", "https://dash.abmcy.com,https://ad.abmcy.com,https://hani.abmcy.com"),
 	}
 
 	if cfg.DatabaseURL == "" {
