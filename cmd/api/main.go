@@ -66,6 +66,11 @@ func main() {
 		slog.Error("platformconfig: initial load failed", "error", err)
 		os.Exit(1)
 	}
+	// With more than one API replica, each pod's cache only reflects the
+	// writes it personally handled — without this, another pod would
+	// answer "not configured" forever for a key set on a different
+	// replica. See platformconfig.Service.StartAutoRefresh.
+	platformCfg.StartAutoRefresh(ctx, 15*time.Second)
 
 	// Wire services.
 	tenants := tenant.NewService(pool)

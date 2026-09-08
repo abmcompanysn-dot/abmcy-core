@@ -11,7 +11,9 @@ package platformconfig
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/abmcy/core/internal/db"
 	"github.com/google/uuid"
@@ -107,6 +109,31 @@ func (s *Service) Load(ctx context.Context) error {
 	s.cache = fresh
 	s.mu.Unlock()
 	return nil
+}
+
+// StartAutoRefresh reloads the cache from Postgres every interval, until
+// ctx is cancelled. Necessary because Set only updates the cache of the
+// pod that handled the write — with more than one API replica, every
+// OTHER replica's Get would otherwise keep answering "not configured"
+// for a freshly-set key forever (Load only ever runs once, at startup).
+// A refresh failure is logged and skipped rather than fatal — a
+// transient DB hiccup shouldn't take down request handling, which keeps
+// serving from the last good cache in the meantime.
+func (s *Service) StartAutoRefresh(ctx context.Context, interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	go func() {
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if err := s.Load(ctx); err != nil {
+					slog.Error("platformconfig: auto-refresh failed", "error", err)
+				}
+			}
+		}
+	}()
 }
 
 // Get returns a configured value and whether it was actually set. Callers
