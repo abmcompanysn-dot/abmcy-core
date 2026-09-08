@@ -10,7 +10,7 @@ const TENANT_DASHBOARD_URL = "https://dash.abmcy.com";
 // Documentation d'intégration API (docs/API.md dans le repo, servie comme
 // une vraie page du site vitrine — voir DOCS_URL dans chaque app pour
 // garder ce lien unique).
-export const DOCS_URL = "https://core.abmcy.com/docs";
+export const DOCS_URL = "https://cors.abmcy.com/docs";
 
 export function Header() {
   return (

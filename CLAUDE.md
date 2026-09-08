@@ -13,13 +13,16 @@ plusieurs clients (tenants) partagent la même infrastructure backend, chacun
 avec ses propres données isolées, son quota de stockage (5 Go par défaut,
 ajustable par plan), et son quota d'emails (100/jour).
 
-Domaines confirmés (2026-09-07) :
-- `api.abmcy.com` — backend Go (VPS, remplace l'ancien `cors.abmcy.com`)
+Domaines confirmés (2026-09-07, `cors.abmcy.com` réaffecté le 2026-09-08) :
+- `api.abmcy.com` — backend Go (VPS)
 - `ad.abmcy.com` — dashboard super-admin (`admin-dashboard/`, Vercel)
 - `dash.abmcy.com` — dashboard tenant/client (`tenant-dashboard/`, Vercel)
-- `core.abmcy.com` — site vitrine du projet (`landing/`, Vercel — pas encore créé,
-  doit inclure une animation de blocs qui se construisent pour visualiser
-  l'architecture, demandée explicitement par l'utilisateur)
+- `cors.abmcy.com` — site vitrine du projet (`landing/`, Vercel — inclut une
+  animation de blocs qui se construisent pour visualiser l'architecture,
+  demandée explicitement par l'utilisateur). Anciennement prévu sous
+  `core.abmcy.com`, réaffecté à `cors.abmcy.com` (déjà pointé chez le
+  registrar, contrairement à `core.abmcy.com` qui n'a jamais eu de DNS) —
+  décision explicite de l'utilisateur le 2026-09-08.
 
 ## Décisions d'architecture (déjà tranchées — ne pas reproposer sans raison)
 

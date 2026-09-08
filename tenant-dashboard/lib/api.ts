@@ -7,7 +7,7 @@ export const API_URL =
   "https://api.abmcy.com";
 
 /** Documentation d'intégration API — page du site vitrine, pas un artifact. */
-export const DOCS_URL = "https://core.abmcy.com/docs";
+export const DOCS_URL = "https://cors.abmcy.com/docs";
 
 const API_KEY_STORAGE_KEY = "abmcy_tenant_api_key";
 

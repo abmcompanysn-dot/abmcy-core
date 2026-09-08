@@ -16,7 +16,7 @@ partagée.
   (ex: HANI'S) pour gérer ses commandes, uploader ses photos produits, initier des
   paiements. Déployé sur Vercel sous `dash.abmcy.com`.
 - **Site vitrine** (`landing/`) : présente le projet ABMCY Core, déployé sur Vercel
-  sous `core.abmcy.com`.
+  sous `cors.abmcy.com`.
 - **Images** : uploadées vers un bucket [Cloudflare R2](https://developers.cloudflare.com/r2/)
   (compatible S3, sans frais de sortie), servies via un domaine public dédié
   (`img.abmcy.com`). On garde juste l'URL + le poids en base.
@@ -53,7 +53,7 @@ pkg/
 migrations/0001_init.sql  Schéma Postgres complet + policies RLS
 admin-dashboard/          Dashboard super-admin (Next.js) -> ad.abmcy.com
 tenant-dashboard/         Dashboard client/tenant (Next.js) -> dash.abmcy.com
-landing/                  Site vitrine du projet (Next.js) -> core.abmcy.com
+landing/                  Site vitrine du projet (Next.js) -> cors.abmcy.com
 k8s/                       Manifests Kubernetes (k3s) pour le déploiement VPS
 deploy/Caddyfile           Config reverse-proxy alternative (si k3s n'est pas utilisé)
 docker-compose.yml         Déploiement local/simple (alternative à k8s/)

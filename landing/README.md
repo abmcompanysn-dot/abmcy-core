@@ -4,7 +4,7 @@ Site vitrine (une page) présentant ABMCY Core, plateforme SaaS multi-tenant
 pour digitaliser les commerçants et artisans ouest-africains. Next.js 16 (App
 Router), TypeScript strict, Tailwind CSS v4, animations via Framer Motion.
 
-Destiné à être déployé sous `core.abmcy.com`.
+Destiné à être déployé sous `cors.abmcy.com`.
 
 ## Développement local
 
@@ -35,7 +35,7 @@ vercel --prod
 ```
 
 Une fois le projet créé sur Vercel, configurer le domaine personnalisé dans
-**Project Settings → Domains** en y ajoutant `core.abmcy.com`, puis pointer le
+**Project Settings → Domains** en y ajoutant `cors.abmcy.com`, puis pointer le
 DNS du domaine (enregistrement CNAME ou A selon les instructions Vercel) chez
 le registrar.
 

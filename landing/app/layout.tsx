@@ -12,7 +12,7 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-const siteUrl = "https://core.abmcy.com";
+const siteUrl = "https://cors.abmcy.com";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
