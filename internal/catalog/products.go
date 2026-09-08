@@ -165,3 +165,59 @@ func (s *ProductService) Get(ctx context.Context, tenantID, productID uuid.UUID)
 	}
 	return &p, nil
 }
+
+// UpdateProductInput mirrors CreateProductInput but every field is a
+// pointer: nil means "leave unchanged", matching how PATCH is expected to
+// behave (as opposed to PUT, which would require the caller to resend
+// every field). Attributes is the one exception — since it's already a
+// free-form JSON blob, a caller wanting to change it sends the full new
+// object; there's no field-level merge. StockQuantity has no way to
+// distinguish "leave unchanged" from "clear to unlimited" — no caller
+// needs that yet, so omitting it in the request just leaves it unchanged.
+type UpdateProductInput struct {
+	Name          *string
+	Description   *string
+	Price         *int
+	Category      *string
+	SKU           *string
+	StockQuantity *int
+	Attributes    json.RawMessage
+	IsFeatured    *bool
+	IsActive      *bool
+}
+
+func (s *ProductService) Update(ctx context.Context, tenantID, productID uuid.UUID, in UpdateProductInput) (*Product, error) {
+	var attrs any
+	if len(in.Attributes) > 0 {
+		attrs = in.Attributes
+	}
+
+	var p Product
+	err := s.pool.WithTenant(ctx, tenantID, func(ctx context.Context, tx db.TxLike) error {
+		row := tx.QueryRow(ctx, `
+			UPDATE products SET
+				name = coalesce($3, name),
+				description = coalesce($4, description),
+				price = coalesce($5, price),
+				category = coalesce($6, category),
+				sku = coalesce($7, sku),
+				stock_quantity = coalesce($8, stock_quantity),
+				attributes = coalesce($9, attributes),
+				is_featured = coalesce($10, is_featured),
+				is_active = coalesce($11, is_active),
+				updated_at = now()
+			WHERE id = $1 AND tenant_id = $2
+			RETURNING id, name, coalesce(description, ''), price, coalesce(category, ''), coalesce(sku, ''), stock_quantity, attributes, is_featured, is_active
+		`, productID, tenantID,
+			in.Name, in.Description, in.Price, in.Category, in.SKU,
+			in.StockQuantity, attrs, in.IsFeatured, in.IsActive)
+		if err := row.Scan(&p.ID, &p.Name, &p.Description, &p.Price, &p.Category, &p.SKU, &p.StockQuantity, &p.Attributes, &p.IsFeatured, &p.IsActive); err != nil {
+			return apierror.ErrNotFound
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &p, nil
+}

@@ -82,6 +82,48 @@ func (s *Server) handleGetProduct(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, p)
 }
 
+func (s *Server) handleUpdateProduct(w http.ResponseWriter, r *http.Request) {
+	t, _ := authmw.TenantFromContext(r.Context())
+	productID, err := parseUUID(chi.URLParam(r, "productID"))
+	if err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+
+	var body struct {
+		Name          *string         `json:"name"`
+		Description   *string         `json:"description"`
+		Price         *int            `json:"price"`
+		Category      *string         `json:"category"`
+		SKU           *string         `json:"sku"`
+		StockQuantity *int            `json:"stock_quantity"`
+		Attributes    json.RawMessage `json:"attributes"`
+		IsFeatured    *bool           `json:"is_featured"`
+		IsActive      *bool           `json:"is_active"`
+	}
+	if err := decodeJSON(r, &body); err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+
+	p, err := s.products.Update(r.Context(), t.ID, productID, catalog.UpdateProductInput{
+		Name:          body.Name,
+		Description:   body.Description,
+		Price:         body.Price,
+		Category:      body.Category,
+		SKU:           body.SKU,
+		StockQuantity: body.StockQuantity,
+		Attributes:    body.Attributes,
+		IsFeatured:    body.IsFeatured,
+		IsActive:      body.IsActive,
+	})
+	if err != nil {
+		response.Err(w, err)
+		return
+	}
+	response.JSON(w, http.StatusOK, p)
+}
+
 // --- Fabrics ----------------------------------------------------------
 
 func (s *Server) handleListFabrics(w http.ResponseWriter, r *http.Request) {

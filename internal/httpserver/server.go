@@ -174,6 +174,7 @@ func (s *Server) routes(rl *authmw.RateLimit) {
 			r.Get("/products", s.handleListProducts)
 			r.Post("/products", s.handleCreateProduct)
 			r.Get("/products/{productID}", s.handleGetProduct)
+			r.Patch("/products/{productID}", s.handleUpdateProduct)
 
 			r.Get("/fabrics", s.handleListFabrics)
 			r.Post("/fabrics", s.handleCreateFabric)
