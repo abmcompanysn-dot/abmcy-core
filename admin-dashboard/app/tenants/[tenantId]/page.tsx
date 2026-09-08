@@ -1,17 +1,20 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
+import { useToast } from "@/lib/toast-context";
 import {
   ApiError,
   listTenants,
   listTenantSocials,
   setTenantSocials,
   updateTenantProfile,
+  uploadTenantLogo,
   type Tenant,
 } from "@/lib/api";
+import { LoadingBlock } from "@/components/Spinner";
 
 const SOCIAL_TYPES = [
   "instagram",
@@ -40,6 +43,7 @@ function emptyProfileForm() {
 
 export default function TenantProfilePage() {
   const { adminKey } = useAuth();
+  const { showToast } = useToast();
   const params = useParams<{ tenantId: string }>();
   const tenantId = params.tenantId;
 
@@ -50,6 +54,7 @@ export default function TenantProfilePage() {
   const [error, setError] = useState<string | null>(null);
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingSocials, setSavingSocials] = useState(false);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   // Chargement initial au montage (et si la clé admin ou le tenant
@@ -120,14 +125,47 @@ export default function TenantProfilePage() {
       });
       setTenant(updated);
       setMessage("Profil enregistré.");
+      showToast("Profil enregistré.", "success");
     } catch (err) {
-      setError(
+      const errMessage =
         err instanceof ApiError
           ? err.message
-          : "Impossible d'enregistrer le profil."
-      );
+          : "Impossible d'enregistrer le profil.";
+      setError(errMessage);
+      showToast(errMessage, "error");
     } finally {
       setSavingProfile(false);
+    }
+  }
+
+  /**
+   * Upload direct du logo depuis ce formulaire : POST
+   * /admin/tenants/{id}/logo (clé admin, pas besoin de la clé API du
+   * tenant), puis on colle l'URL renvoyée dans le champ logo_url — il faut
+   * encore cliquer sur "Enregistrer le profil" pour l'attacher réellement
+   * au tenant, exactement comme avant quand l'URL était collée à la main.
+   */
+  async function handleLogoFileChange(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // permet de re-sélectionner le même fichier plus tard
+    if (!file || !adminKey || !tenantId) return;
+
+    setUploadingLogo(true);
+    setError(null);
+    try {
+      const uploaded = await uploadTenantLogo(adminKey, tenantId, file);
+      setForm((f) => ({ ...f, logo_url: uploaded.url }));
+      showToast(
+        "Logo envoyé — cliquez sur « Enregistrer le profil » pour l'appliquer.",
+        "success"
+      );
+    } catch (err) {
+      const errMessage =
+        err instanceof ApiError ? err.message : "Impossible d'envoyer le logo.";
+      setError(errMessage);
+      showToast(errMessage, "error");
+    } finally {
+      setUploadingLogo(false);
     }
   }
 
@@ -142,12 +180,14 @@ export default function TenantProfilePage() {
       const saved = await setTenantSocials(adminKey, tenantId, cleaned);
       setSocials(saved.map((s) => ({ type: s.type, url: s.url })));
       setMessage("Réseaux sociaux enregistrés.");
+      showToast("Réseaux sociaux enregistrés.", "success");
     } catch (err) {
-      setError(
+      const errMessage =
         err instanceof ApiError
           ? err.message
-          : "Impossible d'enregistrer les réseaux sociaux."
-      );
+          : "Impossible d'enregistrer les réseaux sociaux.";
+      setError(errMessage);
+      showToast(errMessage, "error");
     } finally {
       setSavingSocials(false);
     }
@@ -168,11 +208,7 @@ export default function TenantProfilePage() {
   }
 
   if (loading && !tenant) {
-    return (
-      <div className="rounded-xl border border-slate-200 bg-white p-10 text-center text-sm text-slate-500">
-        Chargement du profil...
-      </div>
-    );
+    return <LoadingBlock label="Chargement du profil..." />;
   }
 
   if (!loading && !tenant) {
@@ -305,18 +341,36 @@ export default function TenantProfilePage() {
             <span className="mb-1 block font-medium text-slate-700">
               URL du logo
             </span>
-            <input
-              type="url"
-              value={form.logo_url}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, logo_url: e.target.value }))
-              }
-              placeholder="https://abmcy.mahu.cards/..."
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
-            />
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                type="url"
+                value={form.logo_url}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, logo_url: e.target.value }))
+                }
+                placeholder="https://abmcy.mahu.cards/..."
+                className="min-w-0 flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+              />
+              <label
+                className={`shrink-0 rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 ${
+                  uploadingLogo ? "cursor-wait opacity-50" : "cursor-pointer"
+                }`}
+              >
+                {uploadingLogo ? "Envoi..." : "Choisir un fichier"}
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleLogoFileChange}
+                  disabled={uploadingLogo}
+                  className="hidden"
+                />
+              </label>
+            </div>
             <span className="mt-1 block text-xs text-slate-500">
-              Uploadez d&apos;abord le fichier via POST /uploads/image, puis
-              collez l&apos;URL renvoyée ici.
+              Uploadez directement un fichier (bouton ci-dessus) ou collez
+              une URL déjà hébergée. L&apos;upload seul ne suffit pas :
+              cliquez ensuite sur « Enregistrer le profil » pour
+              l&apos;appliquer au tenant.
             </span>
           </label>
 
