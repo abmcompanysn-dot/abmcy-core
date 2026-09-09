@@ -273,3 +273,33 @@ func (s *Service) ResetPassword(ctx context.Context, tenantID uuid.UUID, plainte
 		return err
 	})
 }
+
+// StaffSetCustomerPassword lets tenant staff set a customer's password
+// directly from the dashboard — no reset token, no email round-trip.
+// Unlike ResetPassword (self-service, proves ownership via a one-time
+// emailed token), this trusts the caller's authority outright: it's only
+// reachable via requireStaffJWT, so a human staff member with dashboard
+// access is already accountable for the change. Useful for a customer who
+// forgot their password and calls the boutique instead of using the
+// online flow, or one who never set a password at all.
+func (s *Service) StaffSetCustomerPassword(ctx context.Context, tenantID, customerID uuid.UUID, newPassword string) error {
+	if len(newPassword) < 8 {
+		return apierror.New(422, "validation_error", "Le mot de passe doit contenir au moins 8 caractères.")
+	}
+
+	newHash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return apierror.ErrInternal
+	}
+
+	return s.pool.WithTenant(ctx, tenantID, func(ctx context.Context, tx db.TxLike) error {
+		tag, err := tx.Exec(ctx, `UPDATE customers SET password_hash = $1 WHERE id = $2`, string(newHash), customerID)
+		if err != nil {
+			return err
+		}
+		if tag.RowsAffected() == 0 {
+			return apierror.ErrNotFound
+		}
+		return nil
+	})
+}

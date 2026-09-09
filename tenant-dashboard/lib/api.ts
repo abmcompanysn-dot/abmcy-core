@@ -318,6 +318,25 @@ export interface CreateStaffInput {
   role?: "owner" | "staff";
 }
 
+/** Client final (ex: Fatou) — distinct des comptes StaffUser ci-dessus. */
+export interface Customer {
+  id: string;
+  name: string;
+  phone: string;
+  email?: string;
+  shipping_address?: string;
+  /** true si le client a déjà défini un mot de passe pour se connecter
+   * lui-même à son suivi de commande — jamais le mot de passe lui-même. */
+  has_password: boolean;
+}
+
+export interface UpdateCustomerInput {
+  name?: string;
+  phone?: string;
+  email?: string;
+  shipping_address?: string;
+}
+
 export interface UploadedImage {
   id: string;
   url: string;
@@ -867,6 +886,50 @@ export function setStaffActive(
   return request<void>(`/staff/${userId}/active`, apiKey, {
     method: "PUT",
     body: JSON.stringify({ is_active: isActive }),
+  });
+}
+
+/** GET /customers — liste les clients finaux du tenant connecté. */
+export function listCustomers(apiKey: string): Promise<Customer[]> {
+  return request<Customer[]>("/customers", apiKey, { method: "GET" });
+}
+
+/** GET /customers/{customerID} — détail d'un client. */
+export function getCustomer(
+  apiKey: string,
+  customerId: string
+): Promise<Customer> {
+  return request<Customer>(`/customers/${customerId}`, apiKey, {
+    method: "GET",
+  });
+}
+
+/** PATCH /customers/{customerID} — corrige les informations d'un client
+ * depuis le dashboard (nom, téléphone, email, adresse). */
+export function updateCustomer(
+  apiKey: string,
+  customerId: string,
+  input: UpdateCustomerInput
+): Promise<Customer> {
+  return request<Customer>(`/customers/${customerId}`, apiKey, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+/** PUT /customers/{customerID}/password — définit directement un nouveau
+ * mot de passe pour un client (pas de token, contrairement au flux
+ * self-service /auth/customer/reset-password) — utile quand un client
+ * appelle la boutique parce qu'il a oublié son mot de passe, ou n'en a
+ * jamais défini. */
+export function staffSetCustomerPassword(
+  apiKey: string,
+  customerId: string,
+  newPassword: string
+): Promise<void> {
+  return request<void>(`/customers/${customerId}/password`, apiKey, {
+    method: "PUT",
+    body: JSON.stringify({ new_password: newPassword }),
   });
 }
 

@@ -18,6 +18,7 @@ const TOC_LINKS = [
   { href: "#emails", label: "Notifications email" },
   { href: "#catalog", label: "Catalogue (optionnel)" },
   { href: "#customers", label: "Comptes clients finaux" },
+  { href: "#customers-staff", label: "Clients — vus côté tenant" },
   { href: "#staff", label: "Gestion de l'équipe" },
   { href: "#errors", label: "Codes d'erreur" },
 ];
@@ -695,6 +696,57 @@ image=@photo.jpg`}</pre>
               </div>
               <pre className="docs-code-body">{`{ "name": "...", "shipping_address": "..." }`}</pre>
             </div>
+          </section>
+
+          <section className="docs-topic" id="customers-staff">
+            <h2>Clients finaux — vus côté tenant</h2>
+            <p className="docs-desc">
+              Ce qui précède est ce que <strong>le client lui-même</strong> peut faire.
+              Votre équipe peut de son côté consulter et corriger le dossier de
+              n&apos;importe quel client — toujours accessible, sans feature flag, mais
+              réservé au <strong>JWT personnel</strong> comme la gestion d&apos;équipe
+              (<span className="docs-err-code">staff_login_required</span> si connecté
+              seulement par clé API).
+            </p>
+            <div className="docs-endpoint">
+              <div className="docs-endpoint-head">
+                <span className="docs-method get">GET</span>
+                <span className="docs-endpoint-path">/customers</span>
+              </div>
+            </div>
+            <div className="docs-endpoint">
+              <div className="docs-endpoint-head">
+                <span className="docs-method get">GET</span>
+                <span className="docs-endpoint-path">/customers/{"{customerID}"}</span>
+              </div>
+            </div>
+            <div className="docs-endpoint">
+              <div className="docs-endpoint-head">
+                <span className="docs-method patch">PATCH</span>
+                <span className="docs-endpoint-path">/customers/{"{customerID}"}</span>
+              </div>
+              <pre className="docs-code-body">{`{ "name": "...", "phone": "...", "email": "...", "shipping_address": "..." }`}</pre>
+            </div>
+            <p className="docs-op-note">
+              Contrairement à <code>PATCH /auth/customer/me</code> (le client ne peut
+              pas changer son propre numéro, c&apos;est son identifiant), le staff peut
+              corriger le téléphone d&apos;un client depuis le dashboard — utile pour
+              une faute de frappe à la prise de commande.
+            </p>
+            <div className="docs-endpoint">
+              <div className="docs-endpoint-head">
+                <span className="docs-method put">PUT</span>
+                <span className="docs-endpoint-path">/customers/{"{customerID}"}/password</span>
+              </div>
+              <pre className="docs-code-body">{`{ "new_password": "nouveaumotdepasse123" }`}</pre>
+            </div>
+            <p className="docs-op-note">
+              Définit directement un nouveau mot de passe, sans passer par{" "}
+              <code>/auth/customer/forgot-password</code> — utile quand un client
+              appelle la boutique parce qu&apos;il a oublié son mot de passe, ou
+              n&apos;en a jamais défini. Le mot de passe précédent (le cas échéant)
+              est immédiatement remplacé.
+            </p>
           </section>
 
           <section className="docs-topic" id="staff">

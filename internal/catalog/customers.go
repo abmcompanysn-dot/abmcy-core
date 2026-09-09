@@ -16,6 +16,10 @@ type Customer struct {
 	Phone           string    `json:"phone"`
 	Email           string    `json:"email,omitempty"`
 	ShippingAddress string    `json:"shipping_address,omitempty"`
+	// HasPassword tells the dashboard whether this customer can already
+	// log into their own account (customer.password_hash set) — never
+	// the password/hash itself.
+	HasPassword bool `json:"has_password"`
 }
 
 type CustomerService struct {
@@ -24,6 +28,87 @@ type CustomerService struct {
 
 func NewCustomerService(pool *db.Pool) *CustomerService {
 	return &CustomerService{pool: pool}
+}
+
+// List returns every customer the tenant's staff has interacted with
+// (created automatically on first order — see FindOrCreate), most
+// recently created first. Backs the tenant dashboard's Clients page —
+// there's no pagination yet since a single tenant's customer count is
+// small enough that this hasn't been a problem in practice.
+func (s *CustomerService) List(ctx context.Context, tenantID uuid.UUID) ([]Customer, error) {
+	var customers []Customer
+	err := s.pool.WithTenant(ctx, tenantID, func(ctx context.Context, tx db.TxLike) error {
+		rows, err := tx.Query(ctx, `
+			SELECT id, name, phone, coalesce(email, ''), coalesce(shipping_address, ''), password_hash IS NOT NULL
+			FROM customers WHERE tenant_id = $1 ORDER BY created_at DESC
+		`, tenantID)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var c Customer
+			if err := rows.Scan(&c.ID, &c.Name, &c.Phone, &c.Email, &c.ShippingAddress, &c.HasPassword); err != nil {
+				return err
+			}
+			customers = append(customers, c)
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		return nil, fmt.Errorf("catalog: list customers: %w", err)
+	}
+	return customers, nil
+}
+
+// Get returns one customer by ID — used by the tenant dashboard's client
+// detail view and before a staff-initiated update.
+func (s *CustomerService) Get(ctx context.Context, tenantID, customerID uuid.UUID) (*Customer, error) {
+	var c Customer
+	err := s.pool.WithTenant(ctx, tenantID, func(ctx context.Context, tx db.TxLike) error {
+		row := tx.QueryRow(ctx, `
+			SELECT id, name, phone, coalesce(email, ''), coalesce(shipping_address, ''), password_hash IS NOT NULL
+			FROM customers WHERE id = $1
+		`, customerID)
+		return row.Scan(&c.ID, &c.Name, &c.Phone, &c.Email, &c.ShippingAddress, &c.HasPassword)
+	})
+	if err != nil {
+		return nil, apierror.ErrNotFound
+	}
+	return &c, nil
+}
+
+// UpdateInput carries the fields tenant staff can edit about a customer —
+// same shape as auth.UpdateCustomerProfileInput but also allows changing
+// the phone number (the customer's own PATCH /auth/customer/me can't,
+// since phone is how they're looked up and identified in the first
+// place; staff fixing a typo from the dashboard is a different, trusted
+// context).
+type UpdateInput struct {
+	Name            *string
+	Phone           *string
+	Email           *string
+	ShippingAddress *string
+}
+
+func (s *CustomerService) Update(ctx context.Context, tenantID, customerID uuid.UUID, in UpdateInput) (*Customer, error) {
+	var c Customer
+	err := s.pool.WithTenant(ctx, tenantID, func(ctx context.Context, tx db.TxLike) error {
+		row := tx.QueryRow(ctx, `
+			UPDATE customers SET
+				name = coalesce($1, name),
+				phone = coalesce($2, phone),
+				email = coalesce($3, email),
+				shipping_address = coalesce($4, shipping_address)
+			WHERE id = $5
+			RETURNING id, name, phone, coalesce(email, ''), coalesce(shipping_address, ''), password_hash IS NOT NULL
+		`, in.Name, in.Phone, in.Email, in.ShippingAddress, customerID)
+		return row.Scan(&c.ID, &c.Name, &c.Phone, &c.Email, &c.ShippingAddress, &c.HasPassword)
+	})
+	if err != nil {
+		return nil, apierror.ErrNotFound
+	}
+	return &c, nil
 }
 
 // FindOrCreate looks up a customer by phone (the natural identifier for

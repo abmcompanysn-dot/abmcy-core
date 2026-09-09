@@ -168,6 +168,20 @@ func (s *Server) routes(rl *authmw.RateLimit) {
 			r.Put("/staff/{userID}/active", s.handleSetStaffActive)
 		})
 
+		// Clients finaux (ex: Fatou) vus côté tenant — toujours accessible,
+		// pas de feature flag : un tenant qui a des clients doit pouvoir les
+		// consulter et corriger leurs informations quel que soit le service
+		// catalogue actif. Réservé au JWT staff comme /staff, pour la même
+		// raison — une intégration X-API-Key n'a pas d'identité humaine à
+		// qui imputer une modification du dossier d'un client.
+		r.Group(func(r chi.Router) {
+			r.Use(s.requireStaffJWT)
+			r.Get("/customers", s.handleListCustomers)
+			r.Get("/customers/{customerID}", s.handleGetCustomer)
+			r.Patch("/customers/{customerID}", s.handleUpdateCustomer)
+			r.Put("/customers/{customerID}/password", s.handleStaffSetCustomerPassword)
+		})
+
 		r.Post("/orders", s.handleCreateOrder)
 		r.Get("/orders", s.handleListOrders)
 		r.Get("/orders/{orderID}", s.handleGetOrder)

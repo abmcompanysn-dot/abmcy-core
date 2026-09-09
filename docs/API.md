@@ -457,6 +457,41 @@ PATCH /auth/customer/me
 
 ---
 
+## Clients finaux — vus côté tenant
+
+Ce qui précède est ce que **le client lui-même** peut faire. Votre équipe
+peut de son côté consulter et corriger le dossier de n'importe quel client
+depuis le dashboard, ou via ces routes — toujours accessibles, sans feature
+flag, mais réservées au **JWT personnel** comme la gestion d'équipe
+(`staff_login_required`, `403`, si connecté seulement par clé API).
+
+```http
+GET /customers                          # liste tous les clients du tenant
+GET /customers/{customerID}             # détail d'un client
+```
+
+```http
+PATCH /customers/{customerID}
+{ "name": "...", "phone": "...", "email": "...", "shipping_address": "..." }
+```
+
+> Contrairement à `PATCH /auth/customer/me` (le client ne peut pas changer
+> son propre numéro, c'est son identifiant), le staff peut corriger le
+> téléphone d'un client depuis le dashboard — utile pour une faute de
+> frappe à la prise de commande.
+
+```http
+PUT /customers/{customerID}/password
+{ "new_password": "nouveaumotdepasse123" }
+```
+
+> Définit directement un nouveau mot de passe, sans passer par
+> `/auth/customer/forgot-password` — utile quand un client appelle la
+> boutique parce qu'il a oublié son mot de passe, ou n'en a jamais défini.
+> Le mot de passe précédent (le cas échéant) est immédiatement remplacé.
+
+---
+
 ## Gestion de l'équipe — optionnel
 
 Contrôlé par `staff_enabled` (voir `GET /features` plus haut) — activer

@@ -38,6 +38,11 @@ export function NavBar() {
   const links = [
     ...baseLinks,
     ...enabledCatalogLinks,
+    // Clients finaux : toujours accessible (pas de feature flag), mais
+    // réservée aux connexions par compte personnel (JWT staff) — comme
+    // /staff, une clé API technique n'a pas d'identité humaine à qui
+    // imputer une modification du dossier d'un client.
+    ...(isStaffSession ? [{ href: "/clients", label: "Clients" }] : []),
     // Gestion d'équipe : sixième service opt-in (staff_enabled), ET
     // réservée aux connexions par compte personnel (JWT staff) —
     // GET/POST /staff exigent requireStaffJWT côté backend, une clé API
