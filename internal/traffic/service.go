@@ -59,6 +59,103 @@ func (s *Service) SummaryLast24h(ctx context.Context) ([]TenantSummary, error) {
 	return out, err
 }
 
+// SummaryForTenant returns one tenant's own request volume over the last 24
+// hours — used by the tenant's own dashboard (staffAuth), as opposed to
+// SummaryLast24h which lists every tenant for the super-admin.
+func (s *Service) SummaryForTenant(ctx context.Context, tenantID uuid.UUID) (*TenantSummary, error) {
+	var ts TenantSummary
+	err := s.pool.WithSystem(ctx, func(ctx context.Context, tx db.TxLike) error {
+		row := tx.QueryRow(ctx, `
+			SELECT t.id, t.slug,
+			       count(rl.id) AS request_count,
+			       count(*) FILTER (WHERE rl.status_code >= 500) AS error_count,
+			       count(*) FILTER (WHERE rl.rate_limited) AS rate_limited_count
+			FROM tenants t
+			LEFT JOIN request_logs rl
+			       ON rl.tenant_id = t.id AND rl.created_at > now() - interval '24 hours'
+			WHERE t.id = $1
+			GROUP BY t.id, t.slug
+		`, tenantID)
+		return row.Scan(&ts.TenantID, &ts.TenantSlug, &ts.RequestCount, &ts.ErrorCount, &ts.RateLimitedCount)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &ts, nil
+}
+
+type RoutePopularity struct {
+	Method       string `json:"method"`
+	Path         string `json:"path"`
+	RequestCount int64  `json:"request_count"`
+}
+
+// TopRoutesFor returns, for one tenant, which routes are hit most often over
+// the last 24 hours — lets a tenant see which of their services is most
+// solicited by their own integration/site.
+func (s *Service) TopRoutesFor(ctx context.Context, tenantID uuid.UUID, limit int) ([]RoutePopularity, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+	var out []RoutePopularity
+	err := s.pool.WithSystem(ctx, func(ctx context.Context, tx db.TxLike) error {
+		rows, err := tx.Query(ctx, `
+			SELECT method, path, count(*) AS request_count
+			FROM request_logs
+			WHERE tenant_id = $1 AND created_at > now() - interval '24 hours'
+			GROUP BY method, path
+			ORDER BY request_count DESC
+			LIMIT $2
+		`, tenantID, limit)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var rp RoutePopularity
+			if err := rows.Scan(&rp.Method, &rp.Path, &rp.RequestCount); err != nil {
+				return err
+			}
+			out = append(out, rp)
+		}
+		return rows.Err()
+	})
+	return out, err
+}
+
+// TopRoutesGlobal is the same aggregation as TopRoutesFor but across every
+// tenant — used by the super-admin dashboard to see which service is most
+// solicited platform-wide.
+func (s *Service) TopRoutesGlobal(ctx context.Context, limit int) ([]RoutePopularity, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+	var out []RoutePopularity
+	err := s.pool.WithSystem(ctx, func(ctx context.Context, tx db.TxLike) error {
+		rows, err := tx.Query(ctx, `
+			SELECT method, path, count(*) AS request_count
+			FROM request_logs
+			WHERE created_at > now() - interval '24 hours'
+			GROUP BY method, path
+			ORDER BY request_count DESC
+			LIMIT $1
+		`, limit)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var rp RoutePopularity
+			if err := rows.Scan(&rp.Method, &rp.Path, &rp.RequestCount); err != nil {
+				return err
+			}
+			out = append(out, rp)
+		}
+		return rows.Err()
+	})
+	return out, err
+}
+
 type RecentRequest struct {
 	Method      string    `json:"method"`
 	Path        string    `json:"path"`

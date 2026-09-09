@@ -23,6 +23,7 @@ const catalogLinks: { href: string; label: string; feature: keyof Features }[] =
 
 const trailingLinks = [
   { href: "/photos", label: "Photos" },
+  { href: "/trafic", label: "Trafic" },
   { href: "/parametres", label: "Paramètres" },
 ];
 

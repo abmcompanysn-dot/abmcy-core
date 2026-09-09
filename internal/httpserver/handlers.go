@@ -991,6 +991,39 @@ func (s *Server) handleAdminTrafficDetail(w http.ResponseWriter, r *http.Request
 	response.JSON(w, http.StatusOK, recent)
 }
 
+func (s *Server) handleAdminTrafficTopRoutes(w http.ResponseWriter, r *http.Request) {
+	top, err := s.traffic.TopRoutesGlobal(r.Context(), 20)
+	if err != nil {
+		response.Err(w, err)
+		return
+	}
+	response.JSON(w, http.StatusOK, top)
+}
+
+// --- Tenant (own traffic) --------------------------------------------------
+
+func (s *Server) handleTrafficSummary(w http.ResponseWriter, r *http.Request) {
+	t, _ := authmw.TenantFromContext(r.Context())
+
+	summary, err := s.traffic.SummaryForTenant(r.Context(), t.ID)
+	if err != nil {
+		response.Err(w, err)
+		return
+	}
+	response.JSON(w, http.StatusOK, summary)
+}
+
+func (s *Server) handleTrafficTopRoutes(w http.ResponseWriter, r *http.Request) {
+	t, _ := authmw.TenantFromContext(r.Context())
+
+	top, err := s.traffic.TopRoutesFor(r.Context(), t.ID, 20)
+	if err != nil {
+		response.Err(w, err)
+		return
+	}
+	response.JSON(w, http.StatusOK, top)
+}
+
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }

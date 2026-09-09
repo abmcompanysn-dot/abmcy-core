@@ -605,6 +605,36 @@ export function getFeatures(apiKey: string): Promise<Features> {
   return request<Features>("/features", apiKey, { method: "GET" });
 }
 
+// --- Trafic -------------------------------------------------------------
+
+export type TrafficSummary = {
+  tenant_id: string;
+  tenant_slug: string;
+  request_count: number;
+  error_count: number;
+  rate_limited_count: number;
+};
+
+export type RoutePopularity = {
+  method: string;
+  path: string;
+  request_count: number;
+};
+
+/** GET /traffic — volume de requêtes du tenant sur les dernières 24h. */
+export function getTrafficSummary(apiKey: string): Promise<TrafficSummary> {
+  return request<TrafficSummary>("/traffic", apiKey, { method: "GET" });
+}
+
+/** GET /traffic/top-routes — routes les plus sollicitées du tenant (24h). */
+export function getTrafficTopRoutes(
+  apiKey: string
+): Promise<RoutePopularity[]> {
+  return request<RoutePopularity[]>("/traffic/top-routes", apiKey, {
+    method: "GET",
+  });
+}
+
 /** POST /uploads/image — envoie une image (multipart/form-data). */
 /** productId optionnel : quand fourni, l'image est directement rattachée
  * à ce produit (product_images, voir GET /products/{id}.images) plutôt

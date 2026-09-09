@@ -178,6 +178,12 @@ export interface TrafficSummary {
   rate_limited_count: number;
 }
 
+export interface RoutePopularity {
+  method: string;
+  path: string;
+  request_count: number;
+}
+
 export interface RecentRequest {
   method: string;
   path: string;
@@ -566,6 +572,15 @@ export function getTenantTraffic(
     adminKey,
     { method: "GET" }
   );
+}
+
+/** GET /admin/traffic/top-routes — routes les plus sollicitées, tous tenants confondus. */
+export function getTrafficTopRoutes(
+  adminKey: string
+): Promise<RoutePopularity[]> {
+  return request<RoutePopularity[]>("/admin/traffic/top-routes", adminKey, {
+    method: "GET",
+  });
 }
 
 /** GET /health — simple vérification de disponibilité de l'API. */

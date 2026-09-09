@@ -150,6 +150,9 @@ func (s *Server) routes(rl *authmw.RateLimit) {
 
 		r.Get("/features", s.handleGetFeatures)
 
+		r.Get("/traffic", s.handleTrafficSummary)
+		r.Get("/traffic/top-routes", s.handleTrafficTopRoutes)
+
 		r.Group(func(r chi.Router) {
 			r.Use(s.requireStaffJWT)
 			r.Post("/auth/logout", s.handleStaffLogout)
@@ -265,6 +268,7 @@ func (s *Server) routes(rl *authmw.RateLimit) {
 		r.Put("/admin/config/{key}", s.handleAdminSetConfig)
 
 		r.Get("/admin/traffic", s.handleAdminTrafficSummary)
+		r.Get("/admin/traffic/top-routes", s.handleAdminTrafficTopRoutes)
 		r.Get("/admin/traffic/{tenantID}", s.handleAdminTrafficDetail)
 	})
 }

@@ -1,67 +1,61 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
-import { ApiError, getTrafficSummary, type TrafficSummary } from "@/lib/api";
+import {
+  ApiError,
+  getTrafficSummary,
+  getTrafficTopRoutes,
+  type RoutePopularity,
+  type TrafficSummary,
+} from "@/lib/api";
 import { LoadingBlock } from "@/components/Spinner";
 
 export default function TrafficPage() {
   const { adminKey } = useAuth();
   const [summaries, setSummaries] = useState<TrafficSummary[] | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [topRoutes, setTopRoutes] = useState<RoutePopularity[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
+  const [settledToken, setSettledToken] = useState(-1);
+  const loading = settledToken !== reloadToken;
 
-  // Chargement initial au montage (et si la clé admin change).
   useEffect(() => {
     if (!adminKey) return;
-    let ignore = false;
+    let cancelled = false;
 
-    (async () => {
-      try {
-        const data = await getTrafficSummary(adminKey);
-        if (ignore) return;
+    Promise.all([getTrafficSummary(adminKey), getTrafficTopRoutes(adminKey)])
+      .then(([summaryData, topRoutesData]) => {
+        if (cancelled) return;
         setSummaries(
-          [...data].sort((a, b) => b.request_count - a.request_count)
+          [...summaryData].sort((a, b) => b.request_count - a.request_count)
         );
+        setTopRoutes(topRoutesData);
         setError(null);
-      } catch (err) {
-        if (ignore) return;
+      })
+      .catch((err) => {
+        if (cancelled) return;
         setError(
           err instanceof ApiError
             ? err.message
             : "Impossible de charger le trafic."
         );
-      } finally {
-        if (!ignore) setLoading(false);
-      }
-    })();
+      })
+      .finally(() => {
+        if (!cancelled) setSettledToken(reloadToken);
+      });
 
     return () => {
-      ignore = true;
+      cancelled = true;
     };
-  }, [adminKey]);
+  }, [adminKey, reloadToken]);
 
-  // Rechargement manuel (bouton "Actualiser").
-  const load = useCallback(async () => {
-    if (!adminKey) return;
-    setLoading(true);
-    try {
-      const data = await getTrafficSummary(adminKey);
-      setSummaries(
-        [...data].sort((a, b) => b.request_count - a.request_count)
-      );
-      setError(null);
-    } catch (err) {
-      setError(
-        err instanceof ApiError
-          ? err.message
-          : "Impossible de charger le trafic."
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [adminKey]);
+  function reload() {
+    setReloadToken((t) => t + 1);
+  }
+
+  const maxRequestCount = Math.max(1, ...topRoutes.map((r) => r.request_count));
 
   return (
     <div className="space-y-6">
@@ -73,7 +67,7 @@ export default function TrafficPage() {
           </p>
         </div>
         <button
-          onClick={load}
+          onClick={reload}
           disabled={loading}
           className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 disabled:opacity-50"
         >
@@ -85,6 +79,41 @@ export default function TrafficPage() {
         <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
           {error}
         </p>
+      )}
+
+      {topRoutes.length > 0 && (
+        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h2 className="text-sm font-medium text-slate-700">
+            Services les plus sollicités
+          </h2>
+          <p className="mt-1 text-xs text-slate-400">
+            Routes les plus utilisées, tous tenants confondus, sur les
+            dernières 24 heures.
+          </p>
+          <div className="mt-4 space-y-3">
+            {topRoutes.map((route) => (
+              <div key={`${route.method} ${route.path}`}>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="font-mono text-slate-700">
+                    <span className="text-slate-400">{route.method}</span>{" "}
+                    {route.path}
+                  </span>
+                  <span className="tabular-nums text-slate-500">
+                    {route.request_count.toLocaleString("fr-FR")}
+                  </span>
+                </div>
+                <div className="mt-1 h-1.5 w-full rounded-full bg-slate-100">
+                  <div
+                    className="h-1.5 rounded-full bg-indigo-500"
+                    style={{
+                      width: `${(route.request_count / maxRequestCount) * 100}%`,
+                    }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
       {loading && summaries === null ? (
