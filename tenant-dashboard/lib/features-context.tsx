@@ -62,6 +62,7 @@ export function FeaturesProvider({ children }: { children: ReactNode }) {
               cart_enabled: false,
               gallery_enabled: false,
               reviews_enabled: false,
+              staff_enabled: false,
             },
           });
         }

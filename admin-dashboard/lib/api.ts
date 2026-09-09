@@ -111,13 +111,14 @@ export interface UpdateTenantProfileInput {
   language?: string;
 }
 
-/** Les cinq services catalogue, chacun activable indépendamment par tenant. */
+/** Les six services optionnels, chacun activable indépendamment par tenant. */
 export interface FeatureFlags {
   products_enabled: boolean;
   fabrics_enabled: boolean;
   cart_enabled: boolean;
   gallery_enabled: boolean;
   reviews_enabled: boolean;
+  staff_enabled: boolean;
 }
 
 export const FEATURE_LABELS: Record<keyof FeatureFlags, string> = {
@@ -125,6 +126,7 @@ export const FEATURE_LABELS: Record<keyof FeatureFlags, string> = {
   fabrics_enabled: "Tissus",
   cart_enabled: "Panier",
   gallery_enabled: "Galerie",
+  staff_enabled: "Équipe",
   reviews_enabled: "Avis",
 };
 

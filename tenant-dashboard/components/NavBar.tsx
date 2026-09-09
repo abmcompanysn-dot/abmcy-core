@@ -38,10 +38,13 @@ export function NavBar() {
   const links = [
     ...baseLinks,
     ...enabledCatalogLinks,
-    // Gestion d'équipe : réservée aux connexions par compte personnel
-    // (JWT staff) — GET/POST /staff exigent requireStaffJWT côté
-    // backend, une clé API technique n'a pas d'identité humaine.
-    ...(isStaffSession ? [{ href: "/equipe", label: "Équipe" }] : []),
+    // Gestion d'équipe : sixième service opt-in (staff_enabled), ET
+    // réservée aux connexions par compte personnel (JWT staff) —
+    // GET/POST /staff exigent requireStaffJWT côté backend, une clé API
+    // technique n'a pas d'identité humaine à qui accorder des droits.
+    ...(isStaffSession && features?.staff_enabled
+      ? [{ href: "/equipe", label: "Équipe" }]
+      : []),
     ...trailingLinks,
   ];
 

@@ -153,6 +153,16 @@ func (s *Server) routes(rl *authmw.RateLimit) {
 		r.Group(func(r chi.Router) {
 			r.Use(s.requireStaffJWT)
 			r.Post("/auth/logout", s.handleStaffLogout)
+		})
+
+		// Gestion d'équipe : sixième service opt-in (internal/features),
+		// indépendant des cinq services catalogue — activer/désactiver
+		// plusieurs comptes humains pour un tenant n'a rien à voir avec ce
+		// qu'il vend. Off par défaut, jamais inclus dans un préréglage
+		// business_type (voir features.PresetFor).
+		r.Group(func(r chi.Router) {
+			r.Use(s.requireStaffJWT)
+			r.Use(s.requireStaff)
 			r.Get("/staff", s.handleListStaff)
 			r.Post("/staff", s.handleCreateStaff)
 			r.Put("/staff/{userID}/active", s.handleSetStaffActive)
@@ -293,6 +303,17 @@ func (s *Server) requireReviews(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t, _ := authmw.TenantFromContext(r.Context())
 		if err := s.features.RequireReviews(r.Context(), t.ID); err != nil {
+			response.Err(w, err)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (s *Server) requireStaff(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t, _ := authmw.TenantFromContext(r.Context())
+		if err := s.features.RequireStaff(r.Context(), t.ID); err != nil {
 			response.Err(w, err)
 			return
 		}

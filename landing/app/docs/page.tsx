@@ -37,6 +37,7 @@ const ERROR_CODES: { code: string; status: string; meaning: string }[] = [
   { code: "cart_not_enabled", status: "403", meaning: "Service panier non activé pour ce compte" },
   { code: "gallery_not_enabled", status: "403", meaning: "Service galerie non activé pour ce compte" },
   { code: "reviews_not_enabled", status: "403", meaning: "Service avis non activé pour ce compte" },
+  { code: "staff_not_enabled", status: "403", meaning: "Service gestion d'équipe non activé pour ce compte" },
   { code: "order_not_editable", status: "409", meaning: "Commande plus modifiable" },
   { code: "invalid_or_expired_token", status: "400", meaning: "Lien de réinitialisation invalide/expiré" },
   { code: "file_too_large", status: "413", meaning: "Fichier > 25 Mo" },
@@ -393,9 +394,10 @@ image=@photo.jpg`}</pre>
               </span>
             </h2>
             <p className="docs-desc">
-              Cinq services indépendants — produits, tissus, panier, galerie et avis —
-              chacun activé à la demande pour votre compte selon votre activité. Vérifiez
-              votre statut :
+              Six services indépendants — cinq pour le catalogue (produits, tissus,
+              panier, galerie, avis) et un pour la gestion d&apos;équipe — chacun activé
+              à la demande pour votre compte selon votre activité. Vérifiez votre
+              statut :
             </p>
             <div className="docs-endpoint">
               <div className="docs-endpoint-head">
@@ -407,22 +409,24 @@ image=@photo.jpg`}</pre>
   "fabrics_enabled": true,
   "cart_enabled": false,
   "gallery_enabled": true,
-  "reviews_enabled": true
+  "reviews_enabled": true,
+  "staff_enabled": false
 }`}</pre>
             </div>
             <p className="docs-op-note">
-              Cinq services indépendants, chacun activable séparément selon
-              votre activité — un atelier de couture sur-mesure peut par
-              exemple avoir <code>products_enabled</code>,{" "}
+              Chacun activable séparément selon votre activité — un atelier de
+              couture sur-mesure peut par exemple avoir <code>products_enabled</code>,{" "}
               <code>fabrics_enabled</code> et <code>gallery_enabled</code> sans{" "}
               <code>cart_enabled</code> (les commandes passent par{" "}
-              <code>/custom-orders</code> plutôt qu&apos;un panier classique).
-              Si un service est désactivé, ses routes renvoient un 403 avec un
-              code dédié : <span className="docs-err-code">products_not_enabled</span>,{" "}
+              <code>/custom-orders</code> plutôt qu&apos;un panier classique) ni{" "}
+              <code>staff_enabled</code> tant qu&apos;un seul compte suffit. Si un
+              service est désactivé, ses routes renvoient un 403 avec un code dédié :{" "}
+              <span className="docs-err-code">products_not_enabled</span>,{" "}
               <span className="docs-err-code">fabrics_not_enabled</span>,{" "}
               <span className="docs-err-code">cart_not_enabled</span>,{" "}
-              <span className="docs-err-code">gallery_not_enabled</span> ou{" "}
-              <span className="docs-err-code">reviews_not_enabled</span>.
+              <span className="docs-err-code">gallery_not_enabled</span>,{" "}
+              <span className="docs-err-code">reviews_not_enabled</span> ou{" "}
+              <span className="docs-err-code">staff_not_enabled</span>.
             </p>
             <div className="docs-callout">
               <strong>Activation.</strong> Ces services ne s&apos;activent pas
@@ -694,10 +698,20 @@ image=@photo.jpg`}</pre>
           </section>
 
           <section className="docs-topic" id="staff">
-            <h2>Gestion de l&apos;équipe</h2>
+            <h2>
+              Gestion de l&apos;équipe{" "}
+              <span style={{ fontWeight: 400, color: "var(--docs-text-faint)", fontSize: 16 }}>
+                — optionnel
+              </span>
+            </h2>
             <p className="docs-desc">
-              Réservé aux comptes connectés par JWT personnel — une clé API seule ne
-              suffit pas.
+              Contrôlé par <code>staff_enabled</code> (voir <code>GET /features</code> plus
+              haut) — jamais activé automatiquement, quel que soit votre secteur
+              d&apos;activité, puisqu&apos;avoir plusieurs comptes n&apos;a rien à voir avec
+              ce que vous vendez. Si désactivé, ces routes renvoient{" "}
+              <span className="docs-err-code">staff_not_enabled</span>. Une fois activées,
+              elles restent en plus réservées aux comptes connectés par JWT personnel —
+              une clé API seule ne suffit pas (<span className="docs-err-code">staff_login_required</span>).
             </p>
             <div className="docs-endpoint">
               <div className="docs-endpoint-head">
@@ -721,6 +735,11 @@ image=@photo.jpg`}</pre>
               </div>
               <pre className="docs-code-body">{`{ "is_active": false }`}</pre>
             </div>
+            <p className="docs-op-note">
+              <code>POST /auth/logout</code> n&apos;exige que le JWT personnel — pas{" "}
+              <code>staff_enabled</code> — puisqu&apos;un membre déjà connecté doit
+              toujours pouvoir se déconnecter :
+            </p>
             <div className="docs-endpoint">
               <div className="docs-endpoint-head">
                 <span className="docs-method post">POST</span>

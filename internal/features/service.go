@@ -34,6 +34,13 @@ type Flags struct {
 	CartEnabled     bool `json:"cart_enabled"`
 	GalleryEnabled  bool `json:"gallery_enabled"`
 	ReviewsEnabled  bool `json:"reviews_enabled"`
+	// StaffEnabled gates team management (GET/POST /staff, PUT
+	// /staff/{id}/active) — unlike the five catalog services above, this
+	// has nothing to do with what a tenant sells; it's about whether ABMCY
+	// has provisioned multi-account access for that tenant's team. Off by
+	// default like every other service, not part of any business_type
+	// preset (see PresetFor) since it's orthogonal to the storefront.
+	StaffEnabled bool `json:"staff_enabled"`
 }
 
 // PresetFor returns the default flag combination suggested for a business
@@ -61,10 +68,10 @@ func (s *Service) Get(ctx context.Context, tenantID uuid.UUID) (Flags, error) {
 	var f Flags
 	err := s.pool.WithSystem(ctx, func(ctx context.Context, tx db.TxLike) error {
 		row := tx.QueryRow(ctx, `
-			SELECT products_enabled, fabrics_enabled, cart_enabled, gallery_enabled, reviews_enabled
+			SELECT products_enabled, fabrics_enabled, cart_enabled, gallery_enabled, reviews_enabled, staff_enabled
 			FROM tenant_features WHERE tenant_id = $1
 		`, tenantID)
-		err := row.Scan(&f.ProductsEnabled, &f.FabricsEnabled, &f.CartEnabled, &f.GalleryEnabled, &f.ReviewsEnabled)
+		err := row.Scan(&f.ProductsEnabled, &f.FabricsEnabled, &f.CartEnabled, &f.GalleryEnabled, &f.ReviewsEnabled, &f.StaffEnabled)
 		if err != nil {
 			// No row yet: everything stays disabled by default, not an error.
 			f = Flags{}
@@ -84,12 +91,12 @@ func (s *Service) Get(ctx context.Context, tenantID uuid.UUID) (Flags, error) {
 func (s *Service) Set(ctx context.Context, tenantID uuid.UUID, f Flags) error {
 	return s.pool.WithSystem(ctx, func(ctx context.Context, tx db.TxLike) error {
 		_, err := tx.Exec(ctx, `
-			INSERT INTO tenant_features (tenant_id, products_enabled, fabrics_enabled, cart_enabled, gallery_enabled, reviews_enabled, updated_at)
-			VALUES ($1, $2, $3, $4, $5, $6, now())
+			INSERT INTO tenant_features (tenant_id, products_enabled, fabrics_enabled, cart_enabled, gallery_enabled, reviews_enabled, staff_enabled, updated_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, now())
 			ON CONFLICT (tenant_id) DO UPDATE SET
 				products_enabled = $2, fabrics_enabled = $3, cart_enabled = $4,
-				gallery_enabled = $5, reviews_enabled = $6, updated_at = now()
-		`, tenantID, f.ProductsEnabled, f.FabricsEnabled, f.CartEnabled, f.GalleryEnabled, f.ReviewsEnabled)
+				gallery_enabled = $5, reviews_enabled = $6, staff_enabled = $7, updated_at = now()
+		`, tenantID, f.ProductsEnabled, f.FabricsEnabled, f.CartEnabled, f.GalleryEnabled, f.ReviewsEnabled, f.StaffEnabled)
 		return err
 	})
 }
@@ -108,6 +115,7 @@ var errNames = map[string]string{
 	"cart":     "panier",
 	"gallery":  "galerie",
 	"reviews":  "avis",
+	"staff":    "gestion d'équipe",
 }
 
 func notEnabledError(service string) error {
@@ -173,6 +181,17 @@ func (s *Service) RequireReviews(ctx context.Context, tenantID uuid.UUID) error 
 	}
 	if !f.ReviewsEnabled {
 		return notEnabledError("reviews")
+	}
+	return nil
+}
+
+func (s *Service) RequireStaff(ctx context.Context, tenantID uuid.UUID) error {
+	f, err := s.Get(ctx, tenantID)
+	if err != nil {
+		return err
+	}
+	if !f.StaffEnabled {
+		return notEnabledError("staff")
 	}
 	return nil
 }

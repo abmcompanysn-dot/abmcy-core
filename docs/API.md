@@ -297,14 +297,16 @@ minuit. Au-delà, l'erreur `email_quota_exceeded` (`429`) est renvoyée.
 
 ## Catalogue (optionnel)
 
-Le catalogue regroupe cinq services **indépendants**, chacun activé à la
-demande par ABMCY selon votre activité : produits, tissus, panier, galerie,
-avis. Un atelier de couture sur-mesure a par exemple `products_enabled`,
-`fabrics_enabled` et `gallery_enabled` sans `cart_enabled` (les commandes
-passent par `/custom-orders`, pas un panier classique). Si un service n'est
-pas activé, ses routes renvoient un `403` avec un code dédié :
-`products_not_enabled`, `fabrics_not_enabled`, `cart_not_enabled`,
-`gallery_not_enabled` ou `reviews_not_enabled`. Vérifiez votre statut :
+ABMCY expose six services **indépendants**, chacun activé à la demande
+selon votre activité : cinq pour le catalogue (produits, tissus, panier,
+galerie, avis) et un pour la gestion d'équipe (voir plus bas). Un atelier de
+couture sur-mesure a par exemple `products_enabled`, `fabrics_enabled` et
+`gallery_enabled` sans `cart_enabled` (les commandes passent par
+`/custom-orders`, pas un panier classique) ni `staff_enabled` tant qu'un
+seul compte suffit. Si un service n'est pas activé, ses routes renvoient un
+`403` avec un code dédié : `products_not_enabled`, `fabrics_not_enabled`,
+`cart_not_enabled`, `gallery_not_enabled`, `reviews_not_enabled` ou
+`staff_not_enabled`. Vérifiez votre statut :
 
 ```http
 GET /features
@@ -315,7 +317,8 @@ GET /features
   "fabrics_enabled": true,
   "cart_enabled": false,
   "gallery_enabled": true,
-  "reviews_enabled": true
+  "reviews_enabled": true,
+  "staff_enabled": false
 }
 ```
 
@@ -454,11 +457,17 @@ PATCH /auth/customer/me
 
 ---
 
-## Gestion de l'équipe
+## Gestion de l'équipe — optionnel
 
-Réservé aux comptes connectés par **JWT personnel** (`POST /auth/login`) —
-une clé API seule ne suffit pas pour ces actions (`staff_login_required`,
-`403`).
+Contrôlé par `staff_enabled` (voir `GET /features` plus haut) — activer
+plusieurs comptes humains pour un tenant n'a rien à voir avec ce qu'il
+vend, donc ce n'est jamais pré-activé automatiquement, quel que soit le
+secteur d'activité déclaré. Si désactivé, `GET/POST /staff` et
+`PUT /staff/{userID}/active` renvoient `staff_not_enabled` (`403`).
+
+Ces trois routes sont en plus réservées aux comptes connectés par **JWT
+personnel** (`POST /auth/login`) — une clé API seule ne suffit pas
+(`staff_login_required`, `403`), même une fois le service activé.
 
 ```http
 GET /staff                                    # lister l'équipe
@@ -467,8 +476,14 @@ POST /staff                                   # ajouter un membre (réservé au 
 
 PUT /staff/{userID}/active                    # activer/désactiver un compte (owner uniquement)
 { "is_active": false }
+```
 
-POST /auth/logout                             # déconnexion (révoque le token)
+`POST /auth/logout` (déconnexion, révoque le token) n'exige que le JWT
+personnel — pas le service `staff_enabled` — puisqu'un membre déjà connecté
+doit toujours pouvoir se déconnecter :
+
+```http
+POST /auth/logout
 ```
 
 ---
@@ -482,6 +497,7 @@ POST /auth/logout                             # déconnexion (révoque le token)
 | `unauthorized` | 401 | Identifiants invalides |
 | `forbidden` | 403 | Accès refusé (droits insuffisants) |
 | `staff_login_required` | 403 | Cette action nécessite un JWT personnel, pas une clé API |
+| `staff_not_enabled` | 403 | Le service gestion d'équipe n'est pas activé pour ce compte |
 | `not_found` | 404 | Ressource introuvable |
 | `customer_not_found` | 404 | Aucun profil client pour ce téléphone |
 | `unknown_config_key` | 404 | Clé de configuration inconnue |
