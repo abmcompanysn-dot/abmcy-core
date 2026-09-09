@@ -28,7 +28,6 @@ export const metadata: Metadata = {
     "artisan",
     "couture sur-mesure",
     "mobile money",
-    "CinetPay",
   ],
   openGraph: {
     title: "ABMCY Core — La plateforme multi-tenant pour digitaliser votre commerce",

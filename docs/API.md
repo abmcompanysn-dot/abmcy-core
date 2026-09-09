@@ -1,13 +1,12 @@
 # Documentation d'intégration API — ABMCY Core
 
-Cette documentation s'adresse aux tenants (ex: HANI'S) et à leurs développeurs
-qui veulent connecter leur propre site ou application à la plateforme ABMCY
-Core.
+Cette documentation s'adresse aux tenants et à leurs développeurs qui veulent
+connecter leur propre site ou application à la plateforme ABMCY Core.
 
 **URL de base de l'API :** `https://api.abmcy.com`
 
 Un tenant peut aussi utiliser son propre sous-domaine (ex:
-`https://hanis.api.abmcy.com`) pour les routes publiques d'authentification
+`https://votre-boutique.api.abmcy.com`) pour les routes publiques d'authentification
 client — ça dispense de préciser `tenant_slug` dans le corps de la requête.
 Contactez ABMCY pour faire configurer ce sous-domaine.
 
@@ -59,8 +58,8 @@ POST /auth/login
 Content-Type: application/json
 
 {
-  "tenant_slug": "hanis",
-  "email": "contact@mahu.cards",
+  "tenant_slug": "votre-boutique",
+  "email": "contact@votre-boutique.com",
   "password": "votre-mot-de-passe"
 }
 ```
@@ -173,7 +172,7 @@ statut :
 ```json
 [
   { "status": "pending", "created_at": "2026-09-07T12:00:00Z" },
-  { "status": "paid", "comment": "Paiement confirmé par CinetPay", "created_at": "2026-09-07T12:05:00Z" }
+  { "status": "paid", "comment": "Paiement confirmé", "created_at": "2026-09-07T12:05:00Z" }
 ]
 ```
 
@@ -260,7 +259,7 @@ Content-Type: application/json
 
 Réponse `200` :
 ```json
-{ "payment_url": "https://checkout.cinetpay.com/..." }
+{ "payment_url": "https://checkout.exemple.com/..." }
 ```
 
 Redirigez votre client vers `payment_url` pour finaliser le paiement (Wave,
@@ -425,7 +424,7 @@ si configuré).
 
 ```http
 POST /auth/customer/register
-{ "tenant_slug": "hanis", "phone": "+221771234567", "email": "fatou@example.com", "password": "motdepasse123" }
+{ "tenant_slug": "votre-boutique", "phone": "+221771234567", "email": "fatou@example.com", "password": "motdepasse123" }
 ```
 
 > Un client doit déjà exister (créé automatiquement lors de sa première
@@ -433,17 +432,17 @@ POST /auth/customer/register
 
 ```http
 POST /auth/customer/login
-{ "tenant_slug": "hanis", "phone": "+221771234567", "password": "motdepasse123" }
+{ "tenant_slug": "votre-boutique", "phone": "+221771234567", "password": "motdepasse123" }
 ```
 
 ```http
 POST /auth/customer/forgot-password
-{ "tenant_slug": "hanis", "email": "fatou@example.com" }
+{ "tenant_slug": "votre-boutique", "email": "fatou@example.com" }
 ```
 
 ```http
 POST /auth/customer/reset-password
-{ "tenant_slug": "hanis", "token": "token-reçu-par-email", "new_password": "nouveau123" }
+{ "tenant_slug": "votre-boutique", "token": "token-reçu-par-email", "new_password": "nouveau123" }
 ```
 
 Une fois connecté (`Authorization: Bearer <token>`) :
@@ -507,7 +506,7 @@ personnel** (`POST /auth/login`) — une clé API seule ne suffit pas
 ```http
 GET /staff                                    # lister l'équipe
 POST /staff                                   # ajouter un membre (réservé au rôle "owner")
-{ "email": "couturiere@mahu.cards", "password": "...", "role": "staff" }
+{ "email": "staff@votre-boutique.com", "password": "...", "role": "staff" }
 
 PUT /staff/{userID}/active                    # activer/désactiver un compte (owner uniquement)
 { "is_active": false }

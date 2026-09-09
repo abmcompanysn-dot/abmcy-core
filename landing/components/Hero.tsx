@@ -1,6 +1,5 @@
-// Placeholders explicites : à remplacer par les vraies URLs une fois les
-// dashboards déployés (ad.abmcy.com / dash.abmcy.com).
-const ADMIN_DASHBOARD_URL = "https://ad.abmcy.com";
+// Le dashboard admin (ad.abmcy.com) n'est volontairement pas mis en avant
+// sur le site public — usage interne ABMCY uniquement.
 const TENANT_DASHBOARD_URL = "https://dash.abmcy.com";
 
 export function Hero() {
@@ -20,7 +19,7 @@ export function Hero() {
       <div className="mx-auto flex max-w-4xl flex-col items-center px-6 py-24 text-center sm:py-32">
         <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-indigo-100 bg-indigo-50 px-4 py-1.5 text-xs font-medium text-indigo-700">
           <span className="h-1.5 w-1.5 animate-pulse-dot rounded-full bg-indigo-600" />
-          Plateforme multi-tenant — premier client : HANI&apos;S
+          Plateforme multi-tenant pour commerces et artisans
         </div>
 
         <h1 className="text-balance text-4xl font-bold tracking-tight text-slate-900 sm:text-6xl">
@@ -42,16 +41,12 @@ export function Hero() {
             Accéder à mon espace commerçant
           </a>
           <a
-            href={ADMIN_DASHBOARD_URL}
+            href="#fonctionnalites"
             className="w-full rounded-full border border-slate-200 bg-white px-7 py-3.5 text-center text-sm font-semibold text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50 sm:w-auto"
           >
-            Espace équipe ABMCY
+            En savoir plus
           </a>
         </div>
-
-        <p className="mt-4 text-xs text-slate-400">
-          Espace commerçant : dash.abmcy.com · Espace équipe ABMCY : ad.abmcy.com
-        </p>
       </div>
     </section>
   );

@@ -3,7 +3,8 @@ const NAV_LINKS = [
   { href: "#fonctionnalites", label: "Fonctionnalités" },
 ];
 
-const ADMIN_DASHBOARD_URL = "https://ad.abmcy.com";
+// Le dashboard admin (ad.abmcy.com) n'est volontairement pas mis en avant
+// sur le site public — usage interne ABMCY uniquement.
 const TENANT_DASHBOARD_URL = "https://dash.abmcy.com";
 
 export function Footer() {
@@ -46,12 +47,6 @@ export function Footer() {
               className="text-slate-500 transition-colors hover:text-slate-900"
             >
               Espace commerçant
-            </a>
-            <a
-              href={ADMIN_DASHBOARD_URL}
-              className="text-slate-500 transition-colors hover:text-slate-900"
-            >
-              Espace équipe ABMCY
             </a>
           </div>
         </div>

@@ -147,8 +147,8 @@ export default function DocsPage() {
                 <span className="docs-endpoint-auth">public</span>
               </div>
               <pre className="docs-code-body">{`{
-  "tenant_slug": "hanis",
-  "email": "contact@mahu.cards",
+  "tenant_slug": "votre-boutique",
+  "email": "contact@votre-boutique.com",
   "password": "votre-mot-de-passe"
 }`}</pre>
             </div>
@@ -262,7 +262,7 @@ export default function DocsPage() {
               </div>
               <pre className="docs-code-body">{`[
   { "status": "pending", "created_at": "2026-09-07T12:00:00Z" },
-  { "status": "paid", "comment": "Paiement confirmé par CinetPay", "created_at": "2026-09-07T12:05:00Z" }
+  { "status": "paid", "comment": "Paiement confirmé", "created_at": "2026-09-07T12:05:00Z" }
 ]`}</pre>
             </div>
             <div className="docs-endpoint">
@@ -324,7 +324,7 @@ image=@photo.jpg`}</pre>
             </div>
             <p className="docs-op-note">
               Cette route téléverse un fichier brut (<code>multipart/form-data</code>)
-              vers le stockage ABMCY (Cloudflare R2) et renvoie son URL publique
+              vers le stockage ABMCY et renvoie son URL publique
               définitive. Elle ne rattache l&apos;image à aucun produit — voir{" "}
               <a href="#catalog-images">Rattacher une image à un produit</a> ci-dessous
               pour l&apos;associer à un article de votre catalogue, ou{" "}
@@ -350,7 +350,7 @@ image=@photo.jpg`}</pre>
             </div>
             <span className="docs-response-tag ok">200 OK</span>
             <div className="docs-endpoint">
-              <pre className="docs-code-body">{`{ "payment_url": "https://checkout.cinetpay.com/..." }`}</pre>
+              <pre className="docs-code-body">{`{ "payment_url": "https://checkout.exemple.com/..." }`}</pre>
             </div>
             <p className="docs-op-note">
               Redirigez votre client vers <code>payment_url</code> — Wave, Orange Money,
@@ -479,7 +479,7 @@ image=@photo.jpg`}</pre>
   "price": 35000,
   "attributes": { "tailles": ["S","M","L"] },
   "images": [
-    { "id": "uuid", "url": "https://abmcy.mahu.cards/..." }
+    { "id": "uuid", "url": "https://cdn.votre-boutique.com/..." }
   ]
 }`}</pre>
             </div>
@@ -503,7 +503,7 @@ image=@photo.jpg`}</pre>
                 <span className="docs-endpoint-path">/uploads/image</span>
               </div>
               <pre className="docs-code-body">{`1. Téléversez le fichier — multipart/form-data, champ "image"
-   Réponse : { "id": "...", "url": "https://abmcy.mahu.cards/..." }`}</pre>
+   Réponse : { "id": "...", "url": "https://cdn.votre-boutique.com/..." }`}</pre>
             </div>
             <p className="docs-op-note">
               2. Conservez l&apos;<code>url</code> obtenue et placez-la dans les{" "}
@@ -518,15 +518,15 @@ image=@photo.jpg`}</pre>
   "price": 35000,
   "attributes": {
     "tailles": ["S","M","L"],
-    "image_url": "https://abmcy.mahu.cards/.../robe-wax.jpg"
+    "image_url": "https://cdn.votre-boutique.com/.../robe-wax.jpg"
   }
 }`}</pre>
             </div>
             <p className="docs-op-note">
-              Exemple réel — 29 produits importés pour HANI&apos;S avec cette méthode,
-              chaque photo étant à la fois l&apos;image du produit et ajoutée à la
-              galerie (<code>POST /gallery</code>) pour apparaître aussi dans les
-              réalisations de la boutique.
+              Exemple réel — un catalogue de plusieurs dizaines de produits importés
+              avec cette méthode, chaque photo étant à la fois l&apos;image du produit
+              et ajoutée à la galerie (<code>POST /gallery</code>) pour apparaître aussi
+              dans les réalisations de la boutique.
             </p>
 
             <h3 className="docs-op-title">Tissus &amp; galerie</h3>
@@ -556,7 +556,7 @@ image=@photo.jpg`}</pre>
                 <span className="docs-endpoint-path">/gallery</span>
               </div>
               <pre className="docs-code-body">{`{
-  "image_url": "https://abmcy.mahu.cards/.../photo.jpg",
+  "image_url": "https://cdn.votre-boutique.com/.../photo.jpg",
   "category": "femme",
   "caption": "Robe wax sur mesure"
 }`}</pre>
@@ -569,7 +569,7 @@ image=@photo.jpg`}</pre>
               <pre className="docs-code-body">{`[
   {
     "id": "uuid",
-    "image_url": "https://abmcy.mahu.cards/...",
+    "image_url": "https://cdn.votre-boutique.com/...",
     "category": "femme",
     "caption": "Robe wax sur mesure"
   }
@@ -647,7 +647,7 @@ image=@photo.jpg`}</pre>
                 <span className="docs-endpoint-path">/auth/customer/register</span>
                 <span className="docs-endpoint-auth">public</span>
               </div>
-              <pre className="docs-code-body">{`{ "tenant_slug": "hanis", "phone": "+221771234567", "password": "motdepasse123" }`}</pre>
+              <pre className="docs-code-body">{`{ "tenant_slug": "votre-boutique", "phone": "+221771234567", "password": "motdepasse123" }`}</pre>
             </div>
             <p className="docs-op-note">
               Le client doit déjà exister (créé lors de sa première commande) — sinon{" "}
@@ -777,7 +777,7 @@ image=@photo.jpg`}</pre>
                 <span className="docs-endpoint-path">/staff</span>
                 <span className="docs-endpoint-auth">owner</span>
               </div>
-              <pre className="docs-code-body">{`{ "email": "couturiere@mahu.cards", "password": "...", "role": "staff" }`}</pre>
+              <pre className="docs-code-body">{`{ "email": "staff@votre-boutique.com", "password": "...", "role": "staff" }`}</pre>
             </div>
             <div className="docs-endpoint">
               <div className="docs-endpoint-head">

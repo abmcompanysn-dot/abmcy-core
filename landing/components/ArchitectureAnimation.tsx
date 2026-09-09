@@ -30,7 +30,7 @@ const BLOCKS: BlockDef[] = [
   {
     id: "admin",
     label: "Dashboard Admin",
-    sublabel: "ad.abmcy.com",
+    sublabel: "Pilotage de la plateforme",
     icon: Wrench,
     col: "col-start-2",
     row: "row-start-1",
@@ -39,7 +39,7 @@ const BLOCKS: BlockDef[] = [
   {
     id: "tenant",
     label: "Dashboard Tenant",
-    sublabel: "dash.abmcy.com (HANI'S...)",
+    sublabel: "Un espace par commerçant",
     icon: Store,
     col: "col-start-4",
     row: "row-start-1",
@@ -48,7 +48,7 @@ const BLOCKS: BlockDef[] = [
   {
     id: "api",
     label: "Moteur central",
-    sublabel: "API sécurisée · api.abmcy.com",
+    sublabel: "API sécurisée",
     icon: Cog,
     col: "col-start-3",
     row: "row-start-2",

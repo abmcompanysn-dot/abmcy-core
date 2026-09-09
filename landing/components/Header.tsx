@@ -3,9 +3,10 @@ const NAV_LINKS = [
   { href: "#fonctionnalites", label: "Fonctionnalités" },
 ];
 
-// Placeholders explicites : à remplacer par les vraies URLs une fois les
-// dashboards déployés (ad.abmcy.com / dash.abmcy.com).
-const ADMIN_DASHBOARD_URL = "https://ad.abmcy.com";
+// Espace client (tenant) uniquement — le dashboard admin (ad.abmcy.com)
+// n'est pas mis en avant sur le site public : il n'a pas vocation à être
+// découvert par un visiteur, seulement utilisé en interne par l'équipe
+// ABMCY qui en connaît déjà l'adresse.
 const TENANT_DASHBOARD_URL = "https://dash.abmcy.com";
 // Documentation d'intégration API (docs/API.md dans le repo, servie comme
 // une vraie page du site vitrine — voir DOCS_URL dans chaque app pour
@@ -46,15 +47,9 @@ export function Header() {
         <div className="flex items-center gap-3">
           <a
             href={TENANT_DASHBOARD_URL}
-            className="hidden rounded-full border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50 sm:inline-flex"
-          >
-            Espace client
-          </a>
-          <a
-            href={ADMIN_DASHBOARD_URL}
             className="inline-flex rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-slate-700"
           >
-            Espace ABMCY
+            Espace client
           </a>
         </div>
       </div>
