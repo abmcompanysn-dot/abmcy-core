@@ -80,6 +80,7 @@ export interface Order {
   fabric_id?: string;
   fabric_source?: FabricSource;
   notes?: string;
+  items?: OrderItem[]; // rempli par GET /orders/{id}, absent de la liste
   created_at: string;
 }
 
@@ -96,6 +97,15 @@ export interface UpdateOrderInput {
   shipping_address?: string;
   measurements?: Record<string, unknown>;
   notes?: string;
+}
+
+/** Ligne de commande rattachée à un produit catalogue. product_name et
+ * unit_price sont des instantanés pris au moment de la commande. */
+export interface OrderItem {
+  product_id: string;
+  product_name: string;
+  unit_price: number;
+  quantity: number;
 }
 
 export interface OrderStatusEvent {

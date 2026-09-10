@@ -234,6 +234,42 @@ export default function OrderDetailPage({
                 </dl>
               </section>
 
+              {order.items && order.items.length > 0 && (
+                <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+                  <h2 className="mb-4 text-sm font-medium text-slate-700">
+                    Articles
+                  </h2>
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-100 text-xs uppercase tracking-wide text-slate-500">
+                        <th className="pb-2 text-left font-medium">Produit</th>
+                        <th className="pb-2 text-right font-medium">P.U.</th>
+                        <th className="pb-2 text-right font-medium">Qté</th>
+                        <th className="pb-2 text-right font-medium">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {order.items.map((item) => (
+                        <tr key={item.product_id}>
+                          <td className="py-2 text-slate-900">
+                            {item.product_name}
+                          </td>
+                          <td className="py-2 text-right text-slate-600">
+                            {formatFCFA(item.unit_price)}
+                          </td>
+                          <td className="py-2 text-right text-slate-600">
+                            {item.quantity}
+                          </td>
+                          <td className="py-2 text-right font-medium text-slate-900">
+                            {formatFCFA(item.unit_price * item.quantity)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </section>
+              )}
+
               {order.measurements &&
                 Object.keys(order.measurements).length > 0 && (
                   <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
