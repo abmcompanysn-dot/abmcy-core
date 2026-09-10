@@ -4,11 +4,13 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 
 	"github.com/abmcy/core/internal/db"
 	"github.com/abmcy/core/pkg/apierror"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -338,6 +340,63 @@ func (s *Service) UpdateBusinessType(ctx context.Context, tenantID uuid.UUID, bu
 func (s *Service) SetActive(ctx context.Context, tenantID uuid.UUID, active bool) error {
 	return s.pool.WithSystem(ctx, func(ctx context.Context, tx db.TxLike) error {
 		tag, err := tx.Exec(ctx, `UPDATE tenants SET is_active = $1, updated_at = now() WHERE id = $2`, active, tenantID)
+		if err != nil {
+			return err
+		}
+		if tag.RowsAffected() == 0 {
+			return apierror.ErrNotFound
+		}
+		return nil
+	})
+}
+
+// RegenerateAPIKeys issues a fresh public/secret key pair for an existing
+// tenant (e.g. the old key leaked, or a staff member left). The old
+// api_key_public stops authenticating the moment this commits, since
+// middleware.TenantAuth looks tenants up by that exact value. Like
+// Create, the plaintext secret is returned once and never stored.
+func (s *Service) RegenerateAPIKeys(ctx context.Context, tenantID uuid.UUID) (*CreateResult, error) {
+	pubKey, err := randomKey("pk_live_")
+	if err != nil {
+		return nil, apierror.ErrInternal
+	}
+	secretKey, err := randomKey("sk_live_")
+	if err != nil {
+		return nil, apierror.ErrInternal
+	}
+	secretHash, err := bcrypt.GenerateFromPassword([]byte(secretKey), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, apierror.ErrInternal
+	}
+
+	var t Tenant
+	err = s.pool.WithSystem(ctx, func(ctx context.Context, tx db.TxLike) error {
+		row := tx.QueryRow(ctx, `
+			UPDATE tenants SET api_key_public = $1, api_key_secret_hash = $2, updated_at = now()
+			WHERE id = $3
+			RETURNING id, name, slug, coalesce(contact_email, ''), api_key_public, plan, business_type, storage_limit_bytes, storage_used_bytes, email_quota_per_day, rate_limit_per_sec, rate_limit_burst, is_active,
+				coalesce(contact_name, ''), coalesce(contact_phone, ''), coalesce(contact_role, ''), coalesce(logo_url, ''), coalesce(brand_color, ''), coalesce(tagline, ''), language
+		`, pubKey, string(secretHash), tenantID)
+		return row.Scan(&t.ID, &t.Name, &t.Slug, &t.ContactEmail, &t.APIKeyPublic, &t.Plan, &t.BusinessType,
+			&t.StorageLimitBytes, &t.StorageUsedBytes, &t.EmailQuotaPerDay, &t.RateLimitPerSec, &t.RateLimitBurst, &t.IsActive,
+			&t.ContactName, &t.ContactPhone, &t.ContactRole, &t.LogoURL, &t.BrandColor, &t.Tagline, &t.Language)
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, apierror.ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("tenant: regenerate api keys: %w", err)
+	}
+	return &CreateResult{Tenant: t, APIKeySecret: secretKey}, nil
+}
+
+// Delete permanently removes a tenant and, via ON DELETE CASCADE on every
+// table that references tenants(id), all of its data (orders, products,
+// customers, staff users, request logs, etc.). Irreversible — the caller
+// is responsible for confirming intent.
+func (s *Service) Delete(ctx context.Context, tenantID uuid.UUID) error {
+	return s.pool.WithSystem(ctx, func(ctx context.Context, tx db.TxLike) error {
+		tag, err := tx.Exec(ctx, `DELETE FROM tenants WHERE id = $1`, tenantID)
 		if err != nil {
 			return err
 		}

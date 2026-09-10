@@ -107,6 +107,10 @@ export default function TenantsPage() {
     );
   }
 
+  function handleDeleted(tenantId: string) {
+    setTenants((prev) => (prev ? prev.filter((t) => t.id !== tenantId) : prev));
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -141,6 +145,7 @@ export default function TenantsPage() {
           onRateLimitSaved={handleRateLimitSaved}
           onBusinessTypeSaved={handleBusinessTypeSaved}
           onActiveSaved={handleActiveSaved}
+          onDeleted={handleDeleted}
         />
       )}
     </div>

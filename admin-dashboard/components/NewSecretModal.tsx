@@ -6,10 +6,12 @@ export function NewSecretModal({
   tenantName,
   secret,
   onClose,
+  title,
 }: {
   tenantName: string;
   secret: string;
   onClose: () => void;
+  title?: string;
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -33,7 +35,7 @@ export function NewSecretModal({
           </div>
           <div>
             <h2 className="text-lg font-semibold text-slate-900">
-              Tenant « {tenantName} » créé
+              {title ?? `Tenant « ${tenantName} » créé`}
             </h2>
             <p className="mt-1 text-sm text-red-600">
               Copiez cette clé maintenant, elle ne sera plus jamais affichée.

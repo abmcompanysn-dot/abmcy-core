@@ -576,6 +576,39 @@ func (s *Server) handleAdminCreateTenant(w http.ResponseWriter, r *http.Request)
 	})
 }
 
+func (s *Server) handleAdminRegenerateTenantKeys(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := parseUUID(chi.URLParam(r, "tenantID"))
+	if err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+
+	result, err := s.tenants.RegenerateAPIKeys(r.Context(), tenantID)
+	if err != nil {
+		response.Err(w, err)
+		return
+	}
+
+	response.JSON(w, http.StatusOK, map[string]any{
+		"tenant":         result.Tenant,
+		"api_key_secret": result.APIKeySecret, // shown once — client must store it now
+	})
+}
+
+func (s *Server) handleAdminDeleteTenant(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := parseUUID(chi.URLParam(r, "tenantID"))
+	if err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+
+	if err := s.tenants.Delete(r.Context(), tenantID); err != nil {
+		response.Err(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (s *Server) handleAdminUpdateBusinessType(w http.ResponseWriter, r *http.Request) {
 	tenantID, err := parseUUID(chi.URLParam(r, "tenantID"))
 	if err != nil {

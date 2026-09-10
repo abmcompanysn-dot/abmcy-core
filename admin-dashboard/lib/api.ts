@@ -334,6 +334,33 @@ export function createTenant(
   });
 }
 
+/**
+ * POST /admin/tenants/{tenantID}/api-keys — régénère la paire de clés API
+ * d'un tenant. L'ancienne clé publique cesse immédiatement de fonctionner.
+ * Le nouveau secret n'est renvoyé qu'une seule fois.
+ */
+export function regenerateTenantApiKeys(
+  adminKey: string,
+  tenantId: string
+): Promise<CreateTenantResponse> {
+  return request<CreateTenantResponse>(
+    `/admin/tenants/${encodeURIComponent(tenantId)}/api-keys`,
+    adminKey,
+    { method: "POST" }
+  );
+}
+
+/**
+ * DELETE /admin/tenants/{tenantID} — supprime définitivement un tenant et
+ * toutes ses données (commandes, produits, clients, comptes, logs...).
+ * Irréversible.
+ */
+export function deleteTenant(adminKey: string, tenantId: string): Promise<void> {
+  return request<void>(`/admin/tenants/${encodeURIComponent(tenantId)}`, adminKey, {
+    method: "DELETE",
+  });
+}
+
 /** PUT /admin/tenants/{tenantID}/rate-limit — met à jour les limites de trafic d'un tenant. */
 export function updateTenantRateLimit(
   adminKey: string,

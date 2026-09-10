@@ -6,17 +6,20 @@ import { RateLimitEditor } from "./RateLimitEditor";
 import { BusinessTypeEditor } from "./BusinessTypeEditor";
 import { CatalogToggle } from "./CatalogToggle";
 import { TenantActiveToggle } from "./TenantActiveToggle";
+import { TenantDangerActions } from "./TenantDangerActions";
 
 export function TenantsTable({
   tenants,
   onRateLimitSaved,
   onBusinessTypeSaved,
   onActiveSaved,
+  onDeleted,
 }: {
   tenants: Tenant[];
   onRateLimitSaved?: (tenantId: string, perSec: number, burst: number) => void;
   onBusinessTypeSaved?: (tenantId: string, businessType: BusinessType) => void;
   onActiveSaved?: (tenantId: string, isActive: boolean) => void;
+  onDeleted?: (tenantId: string) => void;
 }) {
   const [search, setSearch] = useState("");
 
@@ -78,6 +81,7 @@ export function TenantsTable({
                 <th className="px-4 py-3 font-medium">Type de commerce</th>
                 <th className="px-4 py-3 font-medium">Catalogue</th>
                 <th className="px-4 py-3 font-medium">Profil</th>
+                <th className="px-4 py-3 font-medium">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -139,6 +143,13 @@ export function TenantsTable({
                     >
                       Voir / modifier
                     </Link>
+                  </td>
+                  <td className="px-4 py-3">
+                    <TenantDangerActions
+                      tenantId={t.id}
+                      tenantName={t.name}
+                      onDeleted={(tenantId) => onDeleted?.(tenantId)}
+                    />
                   </td>
                 </tr>
               ))}
