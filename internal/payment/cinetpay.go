@@ -41,7 +41,7 @@ type InitPaymentInput struct {
 	CustomerName  string
 	CustomerPhone string
 	ReturnURL     string
-	NotifyURL     string // webhook: POST /webhooks/cinetpay
+	NotifyURL     string // webhook: POST /webhooks/cinetpay/{tenantSlug}
 }
 
 type InitPaymentResult struct {

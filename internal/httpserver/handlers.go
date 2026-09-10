@@ -351,7 +351,11 @@ func (s *Server) handleInitPayment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	notifyURL := s.publicBaseURL + "/webhooks/cinetpay"
+	// The webhook route is /webhooks/cinetpay/{tenantSlug} — the slug lets
+	// the handler recover which tenant the callback belongs to. Omitting it
+	// here makes CinetPay POST to a path that matches no route (404), so
+	// the order never moves past "pending".
+	notifyURL := s.publicBaseURL + "/webhooks/cinetpay/" + t.Slug
 	result, err := s.payments.InitiateForOrder(r.Context(), t.ID, orderID, body.Amount, body.CustomerName, body.CustomerPhone, body.ReturnURL, notifyURL)
 	if err != nil {
 		response.Err(w, err)
