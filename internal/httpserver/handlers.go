@@ -36,11 +36,25 @@ func (s *Server) handleCreateOrder(w http.ResponseWriter, r *http.Request) {
 		CustomerPhone string          `json:"customer_phone"`
 		CustomerEmail string          `json:"customer_email"`
 		TotalAmount   int             `json:"total_amount"`
-		Measurements  json.RawMessage `json:"measurements"`
+		Items         []struct {
+			ProductID string `json:"product_id"`
+			Quantity  int    `json:"quantity"`
+		} `json:"items"`
+		Measurements json.RawMessage `json:"measurements"`
 	}
 	if err := decodeJSON(r, &body); err != nil {
 		response.Err(w, apierror.ErrValidation)
 		return
+	}
+
+	var items []order.OrderItemInput
+	for _, it := range body.Items {
+		productID, err := parseUUID(it.ProductID)
+		if err != nil {
+			response.Err(w, apierror.New(422, "validation_error", "Un des articles a un identifiant de produit invalide."))
+			return
+		}
+		items = append(items, order.OrderItemInput{ProductID: productID, Quantity: it.Quantity})
 	}
 
 	o, err := s.orders.Create(r.Context(), t.ID, order.CreateInput{
@@ -48,6 +62,7 @@ func (s *Server) handleCreateOrder(w http.ResponseWriter, r *http.Request) {
 		CustomerPhone: body.CustomerPhone,
 		CustomerEmail: body.CustomerEmail,
 		TotalAmount:   body.TotalAmount,
+		Items:         items,
 		Measurements:  body.Measurements,
 	})
 	if err != nil {

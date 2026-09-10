@@ -26,7 +26,24 @@ type Order struct {
 	FabricID        *uuid.UUID      `json:"fabric_id,omitempty"`
 	FabricSource    string          `json:"fabric_source,omitempty"` // maison | envoi_photo | conseil_atelier
 	Notes           string          `json:"notes,omitempty"`
+	Items           []OrderItem     `json:"items,omitempty"` // rempli par Get, pas par List
 	CreatedAt       time.Time       `json:"created_at"`
+}
+
+// OrderItem is a line of an order, tied to a catalog product. product_name
+// and unit_price are snapshots taken when the order was placed.
+type OrderItem struct {
+	ProductID   uuid.UUID `json:"product_id"`
+	ProductName string    `json:"product_name"`
+	UnitPrice   int       `json:"unit_price"`
+	Quantity    int       `json:"quantity"`
+}
+
+// OrderItemInput is what the client sends: a product and a quantity. The
+// price is never taken from the client — the server reads products.price.
+type OrderItemInput struct {
+	ProductID uuid.UUID
+	Quantity  int
 }
 
 type CreateInput struct {
@@ -35,7 +52,8 @@ type CreateInput struct {
 	CustomerPhone   string
 	CustomerEmail   string
 	ShippingAddress string
-	TotalAmount     int
+	TotalAmount     int              // ignoré si Items est non vide (le serveur recalcule)
+	Items           []OrderItemInput // si fourni, total_amount = somme(products.price * quantity)
 	Measurements    json.RawMessage
 	MeasurementsID  *uuid.UUID
 	FabricID        *uuid.UUID
@@ -60,6 +78,38 @@ func (s *Service) Create(ctx context.Context, tenantID uuid.UUID, in CreateInput
 	err := s.pool.WithTenant(ctx, tenantID, func(ctx context.Context, tx db.TxLike) error {
 		orderNumber := fmt.Sprintf("ORD-%d", time.Now().UnixNano()%1_000_000_000)
 
+		// When the client sends line items, the total is authoritative from
+		// the server side: we look each product up, snapshot its name and
+		// price, and sum. The client's total_amount is not trusted.
+		totalAmount := in.TotalAmount
+		var resolvedItems []OrderItem
+		if len(in.Items) > 0 {
+			totalAmount = 0
+			for _, item := range in.Items {
+				if item.Quantity <= 0 {
+					return apierror.New(422, "validation_error", "La quantité de chaque article doit être positive.")
+				}
+				var name string
+				var price int
+				var isActive bool
+				err := tx.QueryRow(ctx, `SELECT name, price, is_active FROM products WHERE id = $1`, item.ProductID).
+					Scan(&name, &price, &isActive)
+				if err != nil {
+					return apierror.New(422, "validation_error", "Un des articles référence un produit introuvable.")
+				}
+				if !isActive {
+					return apierror.New(422, "validation_error", "Un des articles référence un produit qui n'est plus en vente.")
+				}
+				resolvedItems = append(resolvedItems, OrderItem{
+					ProductID:   item.ProductID,
+					ProductName: name,
+					UnitPrice:   price,
+					Quantity:    item.Quantity,
+				})
+				totalAmount += price * item.Quantity
+			}
+		}
+
 		row := tx.QueryRow(ctx, `
 			INSERT INTO orders (tenant_id, order_number, customer_id, customer_name, customer_phone, customer_email,
 				shipping_address, total_amount, measurements, measurements_id, fabric_id, fabric_source, notes)
@@ -68,7 +118,7 @@ func (s *Service) Create(ctx context.Context, tenantID uuid.UUID, in CreateInput
 				coalesce(shipping_address, ''), total_amount, status, measurements, measurements_id, fabric_id,
 				coalesce(fabric_source, ''), coalesce(notes, ''), created_at
 		`, tenantID, orderNumber, in.CustomerID, in.CustomerName, in.CustomerPhone, in.CustomerEmail,
-			in.ShippingAddress, in.TotalAmount, in.Measurements, in.MeasurementsID, in.FabricID, in.FabricSource, in.Notes)
+			in.ShippingAddress, totalAmount, in.Measurements, in.MeasurementsID, in.FabricID, in.FabricSource, in.Notes)
 
 		if err := row.Scan(&o.ID, &o.OrderNumber, &o.CustomerID, &o.CustomerName, &o.CustomerPhone, &o.CustomerEmail,
 			&o.ShippingAddress, &o.TotalAmount, &o.Status, &o.Measurements, &o.MeasurementsID, &o.FabricID,
@@ -76,11 +126,27 @@ func (s *Service) Create(ctx context.Context, tenantID uuid.UUID, in CreateInput
 			return err
 		}
 
+		for _, item := range resolvedItems {
+			if _, err := tx.Exec(ctx, `
+				INSERT INTO order_items (tenant_id, order_id, product_id, product_name, unit_price, quantity)
+				VALUES ($1, $2, $3, $4, $5, $6)
+			`, tenantID, o.ID, item.ProductID, item.ProductName, item.UnitPrice, item.Quantity); err != nil {
+				return err
+			}
+		}
+		o.Items = resolvedItems
+
 		_, err := tx.Exec(ctx, `INSERT INTO order_status_history (tenant_id, order_id, status) VALUES ($1, $2, $3)`,
 			tenantID, o.ID, o.Status)
 		return err
 	})
 	if err != nil {
+		// Preserve a client-facing *apierror.Error (validation of items,
+		// unknown product, ...) — response.Err only recognises it when
+		// it's the exact type, not wrapped.
+		if apiErr, ok := err.(*apierror.Error); ok {
+			return nil, apiErr
+		}
 		return nil, fmt.Errorf("order: create: %w", err)
 	}
 	return &o, nil
@@ -122,9 +188,28 @@ func (s *Service) Get(ctx context.Context, tenantID, orderID uuid.UUID) (*Order,
 				coalesce(fabric_source, ''), coalesce(notes, ''), created_at
 			FROM orders WHERE id = $1
 		`, orderID)
-		return row.Scan(&o.ID, &o.OrderNumber, &o.CustomerID, &o.CustomerName, &o.CustomerPhone, &o.CustomerEmail,
+		if err := row.Scan(&o.ID, &o.OrderNumber, &o.CustomerID, &o.CustomerName, &o.CustomerPhone, &o.CustomerEmail,
 			&o.ShippingAddress, &o.TotalAmount, &o.Status, &o.Measurements, &o.MeasurementsID, &o.FabricID,
-			&o.FabricSource, &o.Notes, &o.CreatedAt)
+			&o.FabricSource, &o.Notes, &o.CreatedAt); err != nil {
+			return err
+		}
+
+		rows, err := tx.Query(ctx, `
+			SELECT product_id, product_name, unit_price, quantity FROM order_items
+			WHERE order_id = $1 ORDER BY created_at ASC
+		`, orderID)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var it OrderItem
+			if err := rows.Scan(&it.ProductID, &it.ProductName, &it.UnitPrice, &it.Quantity); err != nil {
+				return err
+			}
+			o.Items = append(o.Items, it)
+		}
+		return rows.Err()
 	})
 	if err != nil {
 		return nil, apierror.ErrNotFound
