@@ -9,12 +9,20 @@ import (
 	"io"
 )
 
-// AES-GCM at rest for every value in platform_config. CONFIG_ENCRYPTION_KEY
-// is the one secret that still MUST live in the environment — it's the key
-// that unlocks everything else, so it can't itself be stored in the thing
-// it protects.
+// Cryptor does AES-GCM at rest for secrets that can't themselves live in
+// platform_config. CONFIG_ENCRYPTION_KEY is the one secret that still MUST
+// live in the environment — it's the key that unlocks everything else.
+// Exported so other packages that store per-tenant secrets (e.g.
+// internal/tenantpayment) can reuse the exact same scheme.
+type Cryptor = cryptor
+
 type cryptor struct {
 	gcm cipher.AEAD
+}
+
+// NewCryptor builds a Cryptor from a base64-encoded 32-byte (AES-256) key.
+func NewCryptor(base64Key string) (*Cryptor, error) {
+	return newCryptor(base64Key)
 }
 
 func newCryptor(base64Key string) (*cryptor, error) {
@@ -36,6 +44,12 @@ func newCryptor(base64Key string) (*cryptor, error) {
 	}
 	return &cryptor{gcm: gcm}, nil
 }
+
+// Encrypt is the exported form of encrypt, for callers in other packages.
+func (c *cryptor) Encrypt(plaintext string) ([]byte, error) { return c.encrypt(plaintext) }
+
+// Decrypt is the exported form of decrypt, for callers in other packages.
+func (c *cryptor) Decrypt(ciphertext []byte) (string, error) { return c.decrypt(ciphertext) }
 
 func (c *cryptor) encrypt(plaintext string) ([]byte, error) {
 	nonce := make([]byte, c.gcm.NonceSize())

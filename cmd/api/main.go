@@ -1,11 +1,11 @@
 // Command api boots the ABMCY Core Multi-Tenant backend: a single Go
 // binary (modulith) exposing every service — tenants, auth, catalog,
-// orders, storage (Cloudflare R2), payments (CinetPay), notifications
+// orders, storage (Cloudflare R2), payments (ABMCY Core Payment, per-tenant), notifications
 // (Resend) — behind one HTTP router. Deployed on the VPS behind
 // api.abmcy.com; the frontend dashboards (dash.abmcy.com, ad.abmcy.com)
 // live separately on Vercel and talk to this API over HTTPS.
 //
-// Service credentials (R2, Resend, CinetPay) are NOT required at startup:
+// Service credentials (R2, Resend) are NOT required at startup:
 // they're managed at runtime via internal/platformconfig and set from the
 // super-admin dashboard's Configuration page. A fresh deploy boots with
 // none of them configured; the features that need them answer a clear
@@ -34,6 +34,7 @@ import (
 	"github.com/abmcy/core/internal/platformconfig"
 	"github.com/abmcy/core/internal/storage"
 	"github.com/abmcy/core/internal/tenant"
+	"github.com/abmcy/core/internal/tenantpayment"
 	"github.com/abmcy/core/internal/traffic"
 )
 
@@ -77,7 +78,12 @@ func main() {
 	authSvc := auth.NewService(pool, cfg.JWTSecret)
 	orders := order.NewService(pool)
 	storageSvc := storage.NewService(pool, platformCfg)
-	payments := payment.NewService(pool, platformCfg, orders)
+	tenantPayment, err := tenantpayment.NewService(pool, cfg.ConfigEncryptionKey, "https://core.diarra.app")
+	if err != nil {
+		slog.Error("tenantpayment: init failed", "error", err)
+		os.Exit(1)
+	}
+	payments := payment.NewService(pool, tenantPayment, orders)
 	notifications := notification.NewService(pool, platformCfg)
 	trafficSvc := traffic.NewService(pool)
 	featuresSvc := features.NewService(pool)
@@ -101,6 +107,7 @@ func main() {
 		Orders:        orders,
 		Storage:       storageSvc,
 		Payments:      payments,
+		TenantPayment: tenantPayment,
 		Notifications: notifications,
 		Config:        platformCfg,
 		Traffic:       trafficSvc,

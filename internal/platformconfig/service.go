@@ -1,7 +1,7 @@
-// Package platformconfig lets ABMCY-wide service credentials (R2, Resend,
-// CinetPay, the super-admin API key) be set and changed from the
-// super-admin dashboard instead of being frozen into .env files on the
-// VPS at deploy time. Values are read here first; when a key has never
+// Package platformconfig lets ABMCY-wide service credentials (R2, Resend)
+// be set and changed from the super-admin dashboard instead of being
+// frozen into .env files on the VPS at deploy time. Payment credentials
+// are NOT here — they're per-tenant, see internal/tenantpayment. Values are read here first; when a key has never
 // been configured, callers fall back to the matching environment
 // variable, so a fresh deployment still boots (see config.Load) and every
 // feature that depends on an unset key degrades to a clear 503 instead of
@@ -32,8 +32,10 @@ const (
 	KeyR2PublicURL       Key = "R2_PUBLIC_URL"
 	KeyResendAPIKey      Key = "RESEND_API_KEY"
 	KeyResendFromAddr    Key = "RESEND_FROM_ADDR"
-	KeyCinetPayAPIKey    Key = "CINETPAY_API_KEY"
-	KeyCinetPaySiteID    Key = "CINETPAY_SITE_ID"
+	// Payments are no longer configured here: each tenant has its own
+	// ABMCY Core Payment credentials, stored per-tenant and encrypted in
+	// tenant_payment_config — see internal/tenantpayment.
+	//
 	// KeyCorsOrigins holds the comma-separated list of origins allowed to
 	// call the API from a browser (see httpserver.corsMiddleware) — each
 	// tenant's own storefront (e.g. https://hani.abmcy.com) needs to be
@@ -48,7 +50,6 @@ const (
 var AllKeys = []Key{
 	KeyR2AccountID, KeyR2AccessKeyID, KeyR2SecretAccessKey, KeyR2Bucket, KeyR2PublicURL,
 	KeyResendAPIKey, KeyResendFromAddr,
-	KeyCinetPayAPIKey, KeyCinetPaySiteID,
 	KeyCorsOrigins,
 }
 
@@ -60,7 +61,6 @@ var secretKeys = map[Key]bool{
 	KeyR2AccessKeyID:     true,
 	KeyR2SecretAccessKey: true,
 	KeyResendAPIKey:      true,
-	KeyCinetPayAPIKey:    true,
 }
 
 func IsSecret(k Key) bool { return secretKeys[k] }

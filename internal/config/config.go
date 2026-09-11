@@ -9,7 +9,7 @@ import (
 // modulith. Only the values a server literally cannot boot without live
 // here: the database, the JWT signing secret, the key that decrypts
 // platform_config, and the bootstrap admin key. Everything else (R2,
-// Resend, CinetPay) is managed at runtime via internal/platformconfig and
+// Resend) is managed at runtime via internal/platformconfig and
 // set from the super-admin dashboard — a fresh deploy with none of those
 // configured still starts; the features that need them just answer 503
 // until an operator fills them in.

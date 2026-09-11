@@ -286,7 +286,7 @@ var ValidStatuses = map[string]bool{
 // through the pipeline (pending -> confirmed -> paid -> ...) is exactly
 // what should still be possible once the order is "locked" for ordinary
 // field edits (address/measurements/notes). Every change is recorded in
-// order_status_history, same as UpdateStatus (used by the CinetPay
+// order_status_history, same as UpdateStatus (used by the payment
 // webhook) — this is the tenant-dashboard-facing equivalent.
 func (s *Service) SetStatus(ctx context.Context, tenantID, orderID uuid.UUID, status, comment string) (*Order, error) {
 	if !ValidStatuses[status] {

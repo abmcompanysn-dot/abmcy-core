@@ -16,6 +16,7 @@ import (
 	"github.com/abmcy/core/internal/platformconfig"
 	"github.com/abmcy/core/internal/storage"
 	"github.com/abmcy/core/internal/tenant"
+	"github.com/abmcy/core/internal/tenantpayment"
 	"github.com/abmcy/core/internal/traffic"
 	"github.com/abmcy/core/pkg/apierror"
 	"github.com/abmcy/core/pkg/response"
@@ -33,6 +34,7 @@ type Server struct {
 	orders        *order.Service
 	storage       *storage.Service
 	payments      *payment.Service
+	tenantPayment *tenantpayment.Service
 	notifications *notification.Service
 	config        *platformconfig.Service
 	traffic       *traffic.Service
@@ -62,6 +64,7 @@ type Deps struct {
 	Orders        *order.Service
 	Storage       *storage.Service
 	Payments      *payment.Service
+	TenantPayment *tenantpayment.Service
 	Notifications *notification.Service
 	Config        *platformconfig.Service
 	Traffic       *traffic.Service
@@ -88,6 +91,7 @@ func New(d Deps) *Server {
 		orders:        d.Orders,
 		storage:       d.Storage,
 		payments:      d.Payments,
+		tenantPayment: d.TenantPayment,
 		notifications: d.Notifications,
 		config:        d.Config,
 		traffic:       d.Traffic,
@@ -120,7 +124,7 @@ func (s *Server) routes(rl *authmw.RateLimit) {
 	r.Get("/health", s.handleHealth)
 	r.Post("/auth/login", s.handleLogin) // personnel tenant — X-API-Key reste aussi valide sur les routes métier ci-dessous
 	r.Post("/admin/auth/login", s.handleAdminLogin)
-	r.Post("/webhooks/cinetpay/{tenantSlug}", s.handleCinetPayWebhook)
+	r.Post("/webhooks/abmcy/{tenantSlug}", s.handleABMCYPaymentWebhook)
 
 	// Authentification des clients finaux d'un tenant (ex: les acheteurs
 	// de HANI'S) — troisième public, distinct du personnel tenant
@@ -265,6 +269,9 @@ func (s *Server) routes(rl *authmw.RateLimit) {
 		r.Put("/admin/tenants/{tenantID}/socials", s.handleAdminSetTenantSocials)
 		r.Get("/admin/tenants/{tenantID}/features", s.handleAdminGetFeatures)
 		r.Put("/admin/tenants/{tenantID}/features", s.handleAdminUpdateFeatures)
+		r.Get("/admin/tenants/{tenantID}/payment-config", s.handleAdminGetPaymentConfig)
+		r.Put("/admin/tenants/{tenantID}/payment-config", s.handleAdminSetPaymentConfig)
+		r.Delete("/admin/tenants/{tenantID}/payment-config", s.handleAdminDeletePaymentConfig)
 
 		r.Get("/admin/config", s.handleAdminGetConfig)
 		r.Put("/admin/config/{key}", s.handleAdminSetConfig)

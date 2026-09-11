@@ -15,6 +15,7 @@ import (
 	"github.com/abmcy/core/internal/order"
 	"github.com/abmcy/core/internal/platformconfig"
 	"github.com/abmcy/core/internal/tenant"
+	"github.com/abmcy/core/internal/tenantpayment"
 	"github.com/abmcy/core/pkg/apierror"
 	"github.com/abmcy/core/pkg/response"
 	"github.com/go-chi/chi/v5"
@@ -349,11 +350,8 @@ func (s *Server) handleInitPayment(w http.ResponseWriter, r *http.Request) {
 	t, _ := authmw.TenantFromContext(r.Context())
 
 	var body struct {
-		OrderID       string `json:"order_id"`
-		Amount        int    `json:"amount"`
-		CustomerName  string `json:"customer_name"`
-		CustomerPhone string `json:"customer_phone"`
-		ReturnURL     string `json:"return_url"`
+		OrderID   string `json:"order_id"`
+		ReturnURL string `json:"return_url"`
 	}
 	if err := decodeJSON(r, &body); err != nil {
 		response.Err(w, apierror.ErrValidation)
@@ -366,12 +364,12 @@ func (s *Server) handleInitPayment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// The webhook route is /webhooks/cinetpay/{tenantSlug} — the slug lets
-	// the handler recover which tenant the callback belongs to. Omitting it
-	// here makes CinetPay POST to a path that matches no route (404), so
-	// the order never moves past "pending".
-	notifyURL := s.publicBaseURL + "/webhooks/cinetpay/" + t.Slug
-	result, err := s.payments.InitiateForOrder(r.Context(), t.ID, orderID, body.Amount, body.CustomerName, body.CustomerPhone, body.ReturnURL, notifyURL)
+	// ABMCY Core Payment POSTs its callback to /webhooks/abmcy/{tenantSlug};
+	// the slug lets the webhook handler recover which tenant (and which
+	// hmac_secret) the callback belongs to. The amount is not taken from
+	// the caller — it comes from the order.
+	callbackURL := s.publicBaseURL + "/webhooks/abmcy/" + t.Slug
+	result, err := s.payments.InitiateForOrder(r.Context(), t.ID, orderID, body.ReturnURL, callbackURL)
 	if err != nil {
 		response.Err(w, err)
 		return
@@ -379,23 +377,42 @@ func (s *Server) handleInitPayment(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, result)
 }
 
-func (s *Server) handleCinetPayWebhook(w http.ResponseWriter, r *http.Request) {
-	// CinetPay posts form-encoded data; tenant is recovered from the
-	// transaction ref we generated ourselves at InitiateForOrder time.
-	if err := r.ParseForm(); err != nil {
-		response.Err(w, apierror.ErrValidation)
-		return
-	}
-	txRef := r.FormValue("cpm_trans_id")
+func (s *Server) handleABMCYPaymentWebhook(w http.ResponseWriter, r *http.Request) {
 	tenantSlug := chi.URLParam(r, "tenantSlug")
-
 	t, err := s.lookupTenantBySlug(r.Context(), tenantSlug)
 	if err != nil {
 		response.Err(w, apierror.ErrNotFound)
 		return
 	}
 
-	if err := s.payments.HandleWebhook(r.Context(), t.ID, txRef); err != nil {
+	rawBody, err := io.ReadAll(r.Body)
+	if err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+
+	secret, err := s.tenantPayment.HMACSecretFor(r.Context(), t.ID)
+	if err != nil {
+		// No credentials for this tenant — nothing legitimate can be
+		// signing a callback for it.
+		response.Err(w, apierror.ErrNotFound)
+		return
+	}
+	if !tenantpayment.VerifyWebhookSignature(secret, rawBody, r.Header.Get("X-Abmcy-Signature")) {
+		response.Err(w, apierror.New(401, "invalid_signature", "Signature du webhook invalide."))
+		return
+	}
+
+	var payload struct {
+		AppRef string `json:"app_ref"`
+		Status string `json:"status"`
+	}
+	if err := json.Unmarshal(rawBody, &payload); err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+
+	if err := s.payments.HandleWebhook(r.Context(), t.ID, payload.AppRef); err != nil {
 		response.Err(w, err)
 		return
 	}
@@ -969,7 +986,7 @@ func (s *Server) handleSetStaffActive(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// --- Super-admin (platform configuration: R2, Resend, CinetPay) ---------
+// --- Super-admin (platform configuration: R2, Resend) ---------
 
 func (s *Server) handleAdminGetConfig(w http.ResponseWriter, r *http.Request) {
 	statuses, err := s.config.StatusAll(r.Context())
@@ -1011,6 +1028,62 @@ func (s *Server) handleAdminSetConfig(w http.ResponseWriter, r *http.Request) {
 		updatedBy = &claims.UserID
 	}
 	if err := s.config.Set(r.Context(), key, body.Value, updatedBy); err != nil {
+		response.Err(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// --- Super-admin (per-tenant ABMCY Core Payment credentials) ------------
+
+func (s *Server) handleAdminGetPaymentConfig(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := parseUUID(chi.URLParam(r, "tenantID"))
+	if err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+	configured, err := s.tenantPayment.Configured(r.Context(), tenantID)
+	if err != nil {
+		response.Err(w, err)
+		return
+	}
+	// Never echo the credentials back — only whether they're set.
+	response.JSON(w, http.StatusOK, map[string]bool{"configured": configured})
+}
+
+func (s *Server) handleAdminSetPaymentConfig(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := parseUUID(chi.URLParam(r, "tenantID"))
+	if err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+	var body struct {
+		AppKey     string `json:"app_key"`
+		HMACSecret string `json:"hmac_secret"`
+	}
+	if err := decodeJSON(r, &body); err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+
+	var updatedBy *uuid.UUID
+	if claims, ok := adminClaimsFromContext(r.Context()); ok {
+		updatedBy = &claims.UserID
+	}
+	if err := s.tenantPayment.Set(r.Context(), tenantID, body.AppKey, body.HMACSecret, updatedBy); err != nil {
+		response.Err(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleAdminDeletePaymentConfig(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := parseUUID(chi.URLParam(r, "tenantID"))
+	if err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+	if err := s.tenantPayment.Delete(r.Context(), tenantID); err != nil {
 		response.Err(w, err)
 		return
 	}

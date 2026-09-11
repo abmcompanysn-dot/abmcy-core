@@ -2,60 +2,56 @@ package payment
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/abmcy/core/internal/db"
 	"github.com/abmcy/core/internal/order"
-	"github.com/abmcy/core/internal/platformconfig"
-	"github.com/abmcy/core/pkg/apierror"
+	"github.com/abmcy/core/internal/tenantpayment"
 	"github.com/google/uuid"
 )
 
 type Service struct {
-	pool   *db.Pool
-	config *platformconfig.Service
-	orders *order.Service
+	pool     *db.Pool
+	tpayment *tenantpayment.Service
+	orders   *order.Service
 }
 
-func NewService(pool *db.Pool, config *platformconfig.Service, orders *order.Service) *Service {
-	return &Service{pool: pool, config: config, orders: orders}
+func NewService(pool *db.Pool, tpayment *tenantpayment.Service, orders *order.Service) *Service {
+	return &Service{pool: pool, tpayment: tpayment, orders: orders}
 }
 
-// cinetpayClient builds a CinetPay client from whatever is currently
-// configured in platform_config — live, no restart needed after a
-// dashboard update.
-func (s *Service) cinetpayClient() (*CinetPayClient, error) {
-	apiKey, _ := s.config.Get(platformconfig.KeyCinetPayAPIKey)
-	siteID, _ := s.config.Get(platformconfig.KeyCinetPaySiteID)
-	client, err := NewCinetPayClient(apiKey, siteID)
-	if errors.Is(err, ErrNotConfigured) {
-		return nil, apierror.New(503, "payment_not_configured",
-			"Les paiements ne sont pas encore configurés. Configurez CinetPay depuis le dashboard admin.")
-	}
-	return client, err
+// InitResult is what /payments/init returns to the caller — the tenant's
+// site redirects the customer to HostedPayURL (ABMCY Core Payment's
+// hosted page).
+type InitResult struct {
+	PaymentURL string `json:"payment_url"` // = hosted_pay_url, kept name for API compatibility
 }
 
-// InitiateForOrder starts a CinetPay checkout for an existing order and
-// records a "initiated" row in payments so the webhook has something to
-// reconcile against.
-func (s *Service) InitiateForOrder(ctx context.Context, tenantID, orderID uuid.UUID, amount int, customerName, customerPhone, returnURL, notifyURL string) (*InitPaymentResult, error) {
-	cinetpay, err := s.cinetpayClient()
+// InitiateForOrder creates a payment on the tenant's own ABMCY Core
+// Payment application for an existing order, and records an "initiated"
+// row in payments keyed by the order ID (which is the app_ref). The
+// amount is NOT taken from the caller — it comes from the order, which
+// itself is server-computed when the order has line items.
+func (s *Service) InitiateForOrder(ctx context.Context, tenantID, orderID uuid.UUID, returnURL, callbackURL string) (*InitResult, error) {
+	client, err := s.tpayment.ClientFor(ctx, tenantID)
 	if err != nil {
 		return nil, err
 	}
 
-	txRef := "TXN-" + orderID.String()[:8] + "-" + uuid.NewString()[:8]
+	o, err := s.orders.Get(ctx, tenantID, orderID)
+	if err != nil {
+		return nil, err
+	}
 
-	result, err := cinetpay.InitPayment(ctx, InitPaymentInput{
-		TransactionID: txRef,
-		Amount:        amount,
-		Currency:      "XOF",
-		Description:   "Commande " + orderID.String(),
-		CustomerName:  customerName,
-		CustomerPhone: customerPhone,
-		ReturnURL:     returnURL,
-		NotifyURL:     notifyURL,
+	appRef := orderID.String()
+
+	result, err := client.CreatePayment(ctx, tenantpayment.CreatePaymentInput{
+		AppRef:      appRef,
+		AmountCFA:   o.TotalAmount,
+		Country:     "SEN",
+		Description: "Commande " + o.OrderNumber,
+		CallbackURL: callbackURL,
+		ReturnURL:   returnURL,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("payment: init: %w", err)
@@ -64,50 +60,85 @@ func (s *Service) InitiateForOrder(ctx context.Context, tenantID, orderID uuid.U
 	err = s.pool.WithTenant(ctx, tenantID, func(ctx context.Context, tx db.TxLike) error {
 		_, err := tx.Exec(ctx, `
 			INSERT INTO payments (tenant_id, order_id, provider, provider_ref, amount, status)
-			VALUES ($1, $2, 'cinetpay', $3, $4, 'initiated')
-		`, tenantID, orderID, txRef, amount)
+			VALUES ($1, $2, 'abmcy_core_payment', $3, $4, 'initiated')
+			ON CONFLICT DO NOTHING
+		`, tenantID, orderID, appRef, o.TotalAmount)
 		return err
 	})
 	if err != nil {
 		return nil, fmt.Errorf("payment: record: %w", err)
 	}
 
-	return result, nil
+	return &InitResult{PaymentURL: result.HostedPayURL}, nil
 }
 
-// HandleWebhook is called from the CinetPay notify_url. It re-verifies
-// the transaction status directly with CinetPay (never trusts the
-// webhook body alone) before marking the payment/order as paid.
-func (s *Service) HandleWebhook(ctx context.Context, tenantID uuid.UUID, transactionRef string) error {
-	cinetpay, err := s.cinetpayClient()
+// HandleWebhook is called from the ABMCY Core Payment callback_url. The
+// caller has ALREADY verified the HMAC signature against the tenant's
+// hmac_secret. As a second safety net it re-queries the real payment
+// status (GET /v1/payments/{app_ref}) rather than trusting the body's
+// status alone.
+func (s *Service) HandleWebhook(ctx context.Context, tenantID uuid.UUID, appRef string) error {
+	orderID, err := uuid.Parse(appRef)
+	if err != nil {
+		return fmt.Errorf("payment: webhook: bad app_ref %q: %w", appRef, err)
+	}
+
+	client, err := s.tpayment.ClientFor(ctx, tenantID)
 	if err != nil {
 		return err
 	}
-
-	status, err := cinetpay.VerifyTransaction(ctx, transactionRef)
+	p, err := client.GetPayment(ctx, appRef)
 	if err != nil {
-		return fmt.Errorf("payment: verify: %w", err)
+		return fmt.Errorf("payment: webhook verify: %w", err)
 	}
 
-	newStatus := "failed"
-	if status == "ACCEPTED" {
+	return s.applyStatus(ctx, tenantID, orderID, appRef, p.Status)
+}
+
+// Reconcile re-checks a still-pending order against ABMCY Core Payment —
+// the safety net for a lost webhook. Safe to call repeatedly.
+func (s *Service) Reconcile(ctx context.Context, tenantID, orderID uuid.UUID) (string, error) {
+	client, err := s.tpayment.ClientFor(ctx, tenantID)
+	if err != nil {
+		return "", err
+	}
+	appRef := orderID.String()
+	p, err := client.GetPayment(ctx, appRef)
+	if err != nil {
+		return "", fmt.Errorf("payment: reconcile: %w", err)
+	}
+	if err := s.applyStatus(ctx, tenantID, orderID, appRef, p.Status); err != nil {
+		return "", err
+	}
+	return p.Status, nil
+}
+
+// applyStatus maps an ABMCY Core Payment status onto our payments row and,
+// on "completed", moves the order to "paid".
+func (s *Service) applyStatus(ctx context.Context, tenantID, orderID uuid.UUID, appRef, coreStatus string) error {
+	newStatus := "initiated"
+	switch coreStatus {
+	case "completed":
 		newStatus = "success"
+	case "failed", "cancelled":
+		newStatus = "failed"
+	case "pending", "processing":
+		newStatus = "initiated"
 	}
 
-	var orderID uuid.UUID
-	err = s.pool.WithTenant(ctx, tenantID, func(ctx context.Context, tx db.TxLike) error {
-		row := tx.QueryRow(ctx, `
-			UPDATE payments SET status = $1 WHERE provider_ref = $2
-			RETURNING order_id
-		`, newStatus, transactionRef)
-		return row.Scan(&orderID)
+	err := s.pool.WithTenant(ctx, tenantID, func(ctx context.Context, tx db.TxLike) error {
+		_, err := tx.Exec(ctx, `UPDATE payments SET status = $1 WHERE provider_ref = $2`, newStatus, appRef)
+		return err
 	})
 	if err != nil {
 		return fmt.Errorf("payment: update: %w", err)
 	}
 
 	if newStatus == "success" {
-		return s.orders.UpdateStatus(ctx, tenantID, orderID, "paid", "Paiement confirmé par CinetPay")
+		// UpdateStatus is idempotent enough for our needs: re-setting an
+		// already-paid order to paid just appends another history row,
+		// which a lost-then-replayed webhook can cause. Acceptable.
+		return s.orders.UpdateStatus(ctx, tenantID, orderID, "paid", "Paiement confirmé par ABMCY Core Payment")
 	}
 	return nil
 }
