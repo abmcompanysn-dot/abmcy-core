@@ -17,7 +17,16 @@ type Config struct {
 	Env  string // "development" | "production"
 	Port string
 
-	DatabaseURL string
+	// DatabaseURL authenticates as abmcy_app — a role with NO RLS bypass,
+	// used for every tenant-scoped query (see internal/db.Pool.WithTenant).
+	// SystemDatabaseURL authenticates as abmcy_system — a role WITH
+	// BYPASSRLS, used only for operations that legitimately span tenants
+	// (internal/db.Pool.WithSystem: super-admin queries, tenant creation).
+	// Splitting these into two roles is what makes row-level security a
+	// real boundary instead of a no-op silently bypassed by table
+	// ownership or a superuser role — see migrations/0009_real_rls_isolation.sql.
+	DatabaseURL       string
+	SystemDatabaseURL string
 
 	JWTSecret string
 
@@ -39,8 +48,9 @@ func Load() (*Config, error) {
 		Env:  getEnv("APP_ENV", "development"),
 		Port: getEnv("PORT", "8080"),
 
-		DatabaseURL: os.Getenv("DATABASE_URL"),
-		JWTSecret:   os.Getenv("JWT_SECRET"),
+		DatabaseURL:       os.Getenv("DATABASE_URL"),
+		SystemDatabaseURL: os.Getenv("SYSTEM_DATABASE_URL"),
+		JWTSecret:         os.Getenv("JWT_SECRET"),
 
 		ConfigEncryptionKey: os.Getenv("CONFIG_ENCRYPTION_KEY"),
 		AdminAPIKey:         os.Getenv("ADMIN_API_KEY"),
@@ -50,6 +60,9 @@ func Load() (*Config, error) {
 
 	if cfg.DatabaseURL == "" {
 		return nil, fmt.Errorf("DATABASE_URL is required")
+	}
+	if cfg.SystemDatabaseURL == "" {
+		return nil, fmt.Errorf("SYSTEM_DATABASE_URL is required (must authenticate as a BYPASSRLS role, e.g. abmcy_system)")
 	}
 	if cfg.JWTSecret == "" {
 		return nil, fmt.Errorf("JWT_SECRET is required")
