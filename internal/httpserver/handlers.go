@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/abmcy/core/internal/catalog"
 	"github.com/abmcy/core/internal/emailtemplate"
@@ -33,10 +34,10 @@ func (s *Server) handleCreateOrder(w http.ResponseWriter, r *http.Request) {
 	t, _ := authmw.TenantFromContext(r.Context())
 
 	var body struct {
-		CustomerName  string          `json:"customer_name"`
-		CustomerPhone string          `json:"customer_phone"`
-		CustomerEmail string          `json:"customer_email"`
-		TotalAmount   int             `json:"total_amount"`
+		CustomerName  string `json:"customer_name"`
+		CustomerPhone string `json:"customer_phone"`
+		CustomerEmail string `json:"customer_email"`
+		TotalAmount   int    `json:"total_amount"`
 		Items         []struct {
 			ProductID string `json:"product_id"`
 			Quantity  int    `json:"quantity"`
@@ -344,6 +345,128 @@ func (s *Server) handleUploadImage(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusCreated, img)
 }
 
+// maxDeliverableBytes is more generous than maxUploadBytes: a digital
+// product's deliverable (ebook, video, archive) is typically much larger
+// than a product photo.
+const maxDeliverableBytes = 200 << 20 // 200 MB
+
+func (s *Server) handleUploadProductFile(w http.ResponseWriter, r *http.Request) {
+	t, _ := authmw.TenantFromContext(r.Context())
+	productID, err := parseUUID(chi.URLParam(r, "productID"))
+	if err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, maxDeliverableBytes)
+	if err := r.ParseMultipartForm(maxDeliverableBytes); err != nil {
+		response.Err(w, apierror.New(413, "file_too_large", "Fichier trop volumineux."))
+		return
+	}
+
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+	defer file.Close()
+
+	data, err := io.ReadAll(file)
+	if err != nil {
+		response.Err(w, apierror.ErrInternal)
+		return
+	}
+
+	contentType := header.Header.Get("Content-Type")
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+
+	pf, err := s.storage.UploadProductFile(r.Context(), t.ID, productID, header.Filename, contentType, data)
+	if err != nil {
+		response.Err(w, err)
+		return
+	}
+	response.JSON(w, http.StatusCreated, pf)
+}
+
+func (s *Server) handleListProductFiles(w http.ResponseWriter, r *http.Request) {
+	t, _ := authmw.TenantFromContext(r.Context())
+	productID, err := parseUUID(chi.URLParam(r, "productID"))
+	if err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+	files, err := s.storage.ListProductFiles(r.Context(), t.ID, productID)
+	if err != nil {
+		response.Err(w, err)
+		return
+	}
+	response.JSON(w, http.StatusOK, files)
+}
+
+// handleOrderDelivery returns temporary signed download links for every
+// deliverable file attached to a paid order's line items. Refuses
+// (order_not_paid) unless the order's status is "paid" — this is the one
+// gate that decides whether a customer gets their file.
+func (s *Server) handleOrderDelivery(w http.ResponseWriter, r *http.Request) {
+	t, _ := authmw.TenantFromContext(r.Context())
+	orderID, err := parseUUID(chi.URLParam(r, "orderID"))
+	if err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+
+	o, err := s.orders.Get(r.Context(), t.ID, orderID)
+	if err != nil {
+		response.Err(w, err)
+		return
+	}
+	if o.Status != "paid" {
+		response.Err(w, apierror.New(409, "order_not_paid", "Cette commande n'est pas encore payée."))
+		return
+	}
+
+	links, err := s.storage.PresignedFilesForOrder(r.Context(), t.ID, o.ProductIDs())
+	if err != nil {
+		response.Err(w, err)
+		return
+	}
+	response.JSON(w, http.StatusOK, map[string]any{"files": links})
+}
+
+// sendDeliveryEmail notifies the customer that their order was paid and,
+// if it has any deliverable files, gives them a first set of signed
+// download links right in the email — best-effort, same as every other
+// transactional email here: a missing customer email, unconfigured
+// Resend, or exhausted quota never blocks the payment flow itself.
+func (s *Server) sendDeliveryEmail(ctx context.Context, tenantID uuid.UUID, o *order.Order) {
+	if o.CustomerEmail == "" {
+		return
+	}
+
+	paragraphs := []string{
+		"Bonjour " + o.CustomerName + ",",
+		fmt.Sprintf("Votre paiement pour la commande %s a bien été reçu.", o.OrderNumber),
+	}
+
+	links, err := s.storage.PresignedFilesForOrder(ctx, tenantID, o.ProductIDs())
+	if err != nil {
+		slog.Error("delivery links failed to generate for confirmation email", "tenant_id", tenantID, "order_id", o.ID, "error", err)
+	}
+	for _, link := range links {
+		paragraphs = append(paragraphs, fmt.Sprintf("%s : %s (lien valable 15 minutes — redemandez-en un depuis votre commande si besoin)", link.Filename, link.URL))
+	}
+
+	html := emailtemplate.Render(emailtemplate.Data{
+		Heading:    "Paiement confirmé",
+		Paragraphs: paragraphs,
+	})
+	if err := s.notifications.SendEmail(ctx, tenantID, o.CustomerEmail, "Paiement confirmé — "+o.OrderNumber, html, "payment_confirmation"); err != nil {
+		slog.Error("payment confirmation email failed to send", "tenant_id", tenantID, "order_id", o.ID, "error", err)
+	}
+}
+
 // --- Payments ---------------------------------------------------------
 
 func (s *Server) handleInitPayment(w http.ResponseWriter, r *http.Request) {
@@ -377,6 +500,40 @@ func (s *Server) handleInitPayment(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, result)
 }
 
+// --- Payouts ------------------------------------------------------------
+
+func (s *Server) handleCreatePayout(w http.ResponseWriter, r *http.Request) {
+	t, _ := authmw.TenantFromContext(r.Context())
+
+	var body struct {
+		AmountCFA         int    `json:"amount_cfa"`
+		RecipientPhone    string `json:"recipient_phone"`
+		RecipientOperator string `json:"recipient_operator"`
+	}
+	if err := decodeJSON(r, &body); err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+
+	callbackURL := s.publicBaseURL + "/webhooks/abmcy/" + t.Slug
+	p, err := s.payments.RequestPayout(r.Context(), t.ID, body.AmountCFA, body.RecipientPhone, body.RecipientOperator, callbackURL)
+	if err != nil {
+		response.Err(w, err)
+		return
+	}
+	response.JSON(w, http.StatusCreated, p)
+}
+
+func (s *Server) handleListPayouts(w http.ResponseWriter, r *http.Request) {
+	t, _ := authmw.TenantFromContext(r.Context())
+	payouts, err := s.payments.ListPayouts(r.Context(), t.ID)
+	if err != nil {
+		response.Err(w, err)
+		return
+	}
+	response.JSON(w, http.StatusOK, payouts)
+}
+
 func (s *Server) handleABMCYPaymentWebhook(w http.ResponseWriter, r *http.Request) {
 	tenantSlug := chi.URLParam(r, "tenantSlug")
 	t, err := s.lookupTenantBySlug(r.Context(), tenantSlug)
@@ -404,17 +561,37 @@ func (s *Server) handleABMCYPaymentWebhook(w http.ResponseWriter, r *http.Reques
 	}
 
 	var payload struct {
-		AppRef string `json:"app_ref"`
-		Status string `json:"status"`
+		AppRef        string `json:"app_ref"`
+		Status        string `json:"status"`
+		FailureReason string `json:"failure_reason"`
 	}
 	if err := json.Unmarshal(rawBody, &payload); err != nil {
 		response.Err(w, apierror.ErrValidation)
 		return
 	}
 
-	if err := s.payments.HandleWebhook(r.Context(), t.ID, payload.AppRef); err != nil {
+	// Deposits and payouts share this one callback_url — our own app_ref
+	// tells them apart: RequestPayout always generates "payout-<uuid>",
+	// InitiateForOrder always uses the bare order UUID (see both call
+	// sites in internal/payment).
+	if strings.HasPrefix(payload.AppRef, "payout-") {
+		if err := s.payments.HandlePayoutWebhook(r.Context(), t.ID, payload.AppRef, payload.Status, payload.FailureReason); err != nil {
+			response.Err(w, err)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	orderID, justPaid, err := s.payments.HandleWebhook(r.Context(), t.ID, payload.AppRef)
+	if err != nil {
 		response.Err(w, err)
 		return
+	}
+	if justPaid {
+		if o, err := s.orders.Get(r.Context(), t.ID, orderID); err == nil {
+			s.sendDeliveryEmail(r.Context(), t.ID, o)
+		}
 	}
 	w.WriteHeader(http.StatusOK)
 }

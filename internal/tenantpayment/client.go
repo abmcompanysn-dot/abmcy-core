@@ -16,9 +16,10 @@ import (
 
 // Client calls the ABMCY Core Payment API (orchestrator). Every /v1/*
 // request carries three headers:
-//   X-App-Key           the tenant's api_key
-//   X-Abmcy-Timestamp   Unix seconds, valid ±5 min
-//   X-Abmcy-Signature   HMAC_SHA256( SHA256(hmac_secret), "{ts}.{body}" ) hex
+//
+//	X-App-Key           the tenant's api_key
+//	X-Abmcy-Timestamp   Unix seconds, valid ±5 min
+//	X-Abmcy-Signature   HMAC_SHA256( SHA256(hmac_secret), "{ts}.{body}" ) hex
 //
 // The HMAC key is the SHA-256 hash of the secret, NOT the raw secret.
 type Client struct {
@@ -91,7 +92,7 @@ type CreatePaymentInput struct {
 	AppRef      string `json:"app_ref"` // our order ID
 	AmountCFA   int    `json:"amount_cfa"`
 	Country     string `json:"country"`
-	Description  string `json:"description,omitempty"`
+	Description string `json:"description,omitempty"`
 	CallbackURL string `json:"callback_url,omitempty"`
 	ReturnURL   string `json:"return_url,omitempty"`
 }
@@ -126,6 +127,41 @@ func (c *Client) CreatePayment(ctx context.Context, in CreatePaymentInput) (*Cre
 		return nil, fmt.Errorf("tenantpayment: decode /v1/pay: %w", err)
 	}
 	return &out, nil
+}
+
+// --- POST /v1/payouts ------------------------------------------------------
+
+type CreatePayoutInput struct {
+	AppRef            string `json:"app_ref"`
+	AmountCFA         int    `json:"amount_cfa"`
+	RecipientPhone    string `json:"recipient_phone"`
+	RecipientOperator string `json:"recipient_operator"`
+	Country           string `json:"country"`
+	CallbackURL       string `json:"callback_url,omitempty"`
+}
+
+type Payout struct {
+	AppRef        string `json:"app_ref"`
+	Status        string `json:"status"`
+	AmountCFA     int    `json:"amount_cfa"`
+	FailureReason string `json:"failure_reason"`
+}
+
+func (c *Client) CreatePayout(ctx context.Context, in CreatePayoutInput) (*Payout, error) {
+	body, status, err := c.post(ctx, "/v1/payouts", in)
+	if err != nil {
+		return nil, err
+	}
+	if status < 200 || status >= 300 {
+		return nil, fmt.Errorf("tenantpayment: /v1/payouts returned %d: %s", status, string(body))
+	}
+	var wrapped struct {
+		Payout Payout `json:"payout"`
+	}
+	if err := json.Unmarshal(body, &wrapped); err != nil {
+		return nil, fmt.Errorf("tenantpayment: decode /v1/payouts: %w", err)
+	}
+	return &wrapped.Payout, nil
 }
 
 // --- GET /v1/payments/{app_ref} (signed, empty body) --------------------

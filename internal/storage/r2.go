@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials"
@@ -18,9 +19,10 @@ import (
 // deletion, per-tenant prefixes), at the cost of needing a public bucket
 // domain to serve the uploaded files from.
 type R2Client struct {
-	s3Client  *s3.Client
-	bucket    string
-	publicURL string // e.g. "https://img.abmcy.com", no trailing slash
+	s3Client      *s3.Client
+	presignClient *s3.PresignClient
+	bucket        string
+	publicURL     string // e.g. "https://img.abmcy.com", no trailing slash
 }
 
 type R2Config struct {
@@ -50,9 +52,10 @@ func NewR2Client(cfg R2Config) (*R2Client, error) {
 	})
 
 	return &R2Client{
-		s3Client:  client,
-		bucket:    cfg.Bucket,
-		publicURL: cfg.PublicURL,
+		s3Client:      client,
+		presignClient: s3.NewPresignClient(client),
+		bucket:        cfg.Bucket,
+		publicURL:     cfg.PublicURL,
 	}, nil
 }
 
@@ -62,7 +65,32 @@ func NewR2Client(cfg R2Config) (*R2Client, error) {
 // domain (configured separately in the Cloudflare dashboard).
 func (c *R2Client) Upload(ctx context.Context, tenantID uuid.UUID, filename string, contentType string, data []byte) (*UploadResult, error) {
 	key := fmt.Sprintf("%s/%s-%s", tenantID.String(), uuid.NewString(), filename)
+	if err := c.putObject(ctx, key, contentType, data); err != nil {
+		return nil, err
+	}
+	return &UploadResult{
+		Key:       key,
+		URL:       c.publicURL + "/" + key,
+		SizeBytes: int64(len(data)),
+	}, nil
+}
 
+// UploadPrivate stores a file (e.g. a digital product's deliverable) under
+// a "private/" prefix, distinct from the tenant-scoped prefix used by
+// Upload. It never returns a public URL — the object is not meant to be
+// served directly; only PresignGetObject grants temporary, order-gated
+// access. Keeping it under its own prefix also means the bucket's public
+// custom domain (if ever misconfigured to serve the whole bucket) can be
+// scoped to exclude "private/" entirely.
+func (c *R2Client) UploadPrivate(ctx context.Context, tenantID uuid.UUID, filename string, contentType string, data []byte) (*UploadResult, error) {
+	key := fmt.Sprintf("private/%s/%s-%s", tenantID.String(), uuid.NewString(), filename)
+	if err := c.putObject(ctx, key, contentType, data); err != nil {
+		return nil, err
+	}
+	return &UploadResult{Key: key, SizeBytes: int64(len(data))}, nil
+}
+
+func (c *R2Client) putObject(ctx context.Context, key, contentType string, data []byte) error {
 	_, err := c.s3Client.PutObject(ctx, &s3.PutObjectInput{
 		Bucket:      aws.String(c.bucket),
 		Key:         aws.String(key),
@@ -70,17 +98,44 @@ func (c *R2Client) Upload(ctx context.Context, tenantID uuid.UUID, filename stri
 		ContentType: aws.String(contentType),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("r2: put object: %w", err)
+		return fmt.Errorf("r2: put object: %w", err)
 	}
-
-	return &UploadResult{
-		URL:       c.publicURL + "/" + key,
-		SizeBytes: int64(len(data)),
-	}, nil
+	return nil
 }
 
-// UploadResult is returned by any storage backend upload.
+// PresignGetObject returns a temporary, signed download URL for a private
+// object key — this is the only way to read anything uploaded via
+// UploadPrivate, since those objects are never served from the public
+// bucket domain.
+func (c *R2Client) PresignGetObject(ctx context.Context, key string, expiry time.Duration) (string, error) {
+	req, err := c.presignClient.PresignGetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(c.bucket),
+		Key:    aws.String(key),
+	}, s3.WithPresignExpires(expiry))
+	if err != nil {
+		return "", fmt.Errorf("r2: presign get object: %w", err)
+	}
+	return req.URL, nil
+}
+
+// DeleteKey removes an object by its raw key (as opposed to Delete, which
+// takes a public URL — private objects have no public URL to derive a key
+// from).
+func (c *R2Client) DeleteKey(ctx context.Context, key string) error {
+	_, err := c.s3Client.DeleteObject(ctx, &s3.DeleteObjectInput{
+		Bucket: aws.String(c.bucket),
+		Key:    aws.String(key),
+	})
+	if err != nil {
+		return fmt.Errorf("r2: delete object: %w", err)
+	}
+	return nil
+}
+
+// UploadResult is returned by any storage backend upload. Key is always
+// set; URL is only set for public uploads (Upload, not UploadPrivate).
 type UploadResult struct {
+	Key       string
 	URL       string
 	SizeBytes int64
 }

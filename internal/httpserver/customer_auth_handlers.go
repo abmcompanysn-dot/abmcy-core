@@ -8,6 +8,7 @@ import (
 	"github.com/abmcy/core/internal/emailtemplate"
 	"github.com/abmcy/core/pkg/apierror"
 	"github.com/abmcy/core/pkg/response"
+	"github.com/go-chi/chi/v5"
 )
 
 // --- Authentification des clients finaux d'un tenant ---------------------
@@ -196,4 +197,72 @@ func (s *Server) handleCustomerUpdateMe(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	response.JSON(w, http.StatusOK, profile)
+}
+
+// --- Commandes du client connecté (ex: "mes commandes") -------------------
+//
+// Distinctes des routes /orders (staffAuth) : un client final ne doit
+// jamais pouvoir lister ou lire les commandes des AUTRES clients du même
+// tenant — chaque handler vérifie explicitement que la commande demandée
+// lui appartient (order.CustomerID == claims.CustomerID), en plus de
+// l'isolation RLS par tenant déjà appliquée par order.Service.
+
+func (s *Server) handleCustomerListOrders(w http.ResponseWriter, r *http.Request) {
+	claims, _ := customerFromContext(r.Context())
+	orders, err := s.orders.ListForCustomer(r.Context(), claims.TenantID, claims.CustomerID)
+	if err != nil {
+		response.Err(w, err)
+		return
+	}
+	response.JSON(w, http.StatusOK, orders)
+}
+
+func (s *Server) handleCustomerGetOrder(w http.ResponseWriter, r *http.Request) {
+	claims, _ := customerFromContext(r.Context())
+	orderID, err := parseUUID(chi.URLParam(r, "orderID"))
+	if err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+
+	o, err := s.orders.Get(r.Context(), claims.TenantID, orderID)
+	if err != nil {
+		response.Err(w, err)
+		return
+	}
+	if o.CustomerID == nil || *o.CustomerID != claims.CustomerID {
+		response.Err(w, apierror.ErrNotFound)
+		return
+	}
+	response.JSON(w, http.StatusOK, o)
+}
+
+func (s *Server) handleCustomerOrderDelivery(w http.ResponseWriter, r *http.Request) {
+	claims, _ := customerFromContext(r.Context())
+	orderID, err := parseUUID(chi.URLParam(r, "orderID"))
+	if err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+
+	o, err := s.orders.Get(r.Context(), claims.TenantID, orderID)
+	if err != nil {
+		response.Err(w, err)
+		return
+	}
+	if o.CustomerID == nil || *o.CustomerID != claims.CustomerID {
+		response.Err(w, apierror.ErrNotFound)
+		return
+	}
+	if o.Status != "paid" {
+		response.Err(w, apierror.New(409, "order_not_paid", "Cette commande n'est pas encore payée."))
+		return
+	}
+
+	links, err := s.storage.PresignedFilesForOrder(r.Context(), claims.TenantID, o.ProductIDs())
+	if err != nil {
+		response.Err(w, err)
+		return
+	}
+	response.JSON(w, http.StatusOK, map[string]any{"files": links})
 }

@@ -140,6 +140,9 @@ func (s *Server) routes(rl *authmw.RateLimit) {
 		r.Post("/auth/customer/logout", s.handleCustomerLogout)
 		r.Get("/auth/customer/me", s.handleCustomerMe)
 		r.Patch("/auth/customer/me", s.handleCustomerUpdateMe)
+		r.Get("/auth/customer/orders", s.handleCustomerListOrders)
+		r.Get("/auth/customer/orders/{orderID}", s.handleCustomerGetOrder)
+		r.Get("/auth/customer/orders/{orderID}/delivery", s.handleCustomerOrderDelivery)
 	})
 
 	// Tenant-scoped API — accepts EITHER X-API-Key (external integrations,
@@ -160,6 +163,16 @@ func (s *Server) routes(rl *authmw.RateLimit) {
 		r.Group(func(r chi.Router) {
 			r.Use(s.requireStaffJWT)
 			r.Post("/auth/logout", s.handleStaffLogout)
+		})
+
+		// Versements : réservés au personnel connecté par JWT (pas
+		// X-API-Key), même raisonnement que /staff — une intégration
+		// technique n'a pas d'identité humaine à qui imputer une demande de
+		// retrait d'argent.
+		r.Group(func(r chi.Router) {
+			r.Use(s.requireStaffJWT)
+			r.Post("/payouts", s.handleCreatePayout)
+			r.Get("/payouts", s.handleListPayouts)
 		})
 
 		// Gestion d'équipe : sixième service opt-in (internal/features),
@@ -212,7 +225,11 @@ func (s *Server) routes(rl *authmw.RateLimit) {
 			r.Post("/products", s.handleCreateProduct)
 			r.Get("/products/{productID}", s.handleGetProduct)
 			r.Patch("/products/{productID}", s.handleUpdateProduct)
+			r.Post("/products/{productID}/file", s.handleUploadProductFile)
+			r.Get("/products/{productID}/files", s.handleListProductFiles)
 		})
+
+		r.Get("/orders/{orderID}/delivery", s.handleOrderDelivery)
 
 		r.Group(func(r chi.Router) {
 			r.Use(s.requireFabrics)

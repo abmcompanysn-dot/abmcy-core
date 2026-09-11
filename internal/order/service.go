@@ -46,6 +46,16 @@ type OrderItemInput struct {
 	Quantity  int
 }
 
+// ProductIDs collects the distinct product IDs referenced by an order's
+// items — used to look up deliverable files for a paid order.
+func (o *Order) ProductIDs() []uuid.UUID {
+	ids := make([]uuid.UUID, 0, len(o.Items))
+	for _, item := range o.Items {
+		ids = append(ids, item.ProductID)
+	}
+	return ids
+}
+
 type CreateInput struct {
 	CustomerID      *uuid.UUID
 	CustomerName    string
@@ -161,6 +171,37 @@ func (s *Service) List(ctx context.Context, tenantID uuid.UUID) ([]Order, error)
 				coalesce(fabric_source, ''), coalesce(notes, ''), created_at
 			FROM orders ORDER BY created_at DESC LIMIT 200
 		`)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var o Order
+			if err := rows.Scan(&o.ID, &o.OrderNumber, &o.CustomerID, &o.CustomerName, &o.CustomerPhone, &o.CustomerEmail,
+				&o.ShippingAddress, &o.TotalAmount, &o.Status, &o.Measurements, &o.MeasurementsID, &o.FabricID,
+				&o.FabricSource, &o.Notes, &o.CreatedAt); err != nil {
+				return err
+			}
+			orders = append(orders, o)
+		}
+		return rows.Err()
+	})
+	return orders, err
+}
+
+// ListForCustomer is the end-customer-facing equivalent of List: "my
+// orders", scoped to their own customer_id rather than every order the
+// tenant has. Items are not loaded here (same as List) — a customer
+// fetches one order's detail via Get if they need the line items.
+func (s *Service) ListForCustomer(ctx context.Context, tenantID, customerID uuid.UUID) ([]Order, error) {
+	var orders []Order
+	err := s.pool.WithTenant(ctx, tenantID, func(ctx context.Context, tx db.TxLike) error {
+		rows, err := tx.Query(ctx, `
+			SELECT id, order_number, customer_id, customer_name, customer_phone, coalesce(customer_email, ''),
+				coalesce(shipping_address, ''), total_amount, status, measurements, measurements_id, fabric_id,
+				coalesce(fabric_source, ''), coalesce(notes, ''), created_at
+			FROM orders WHERE customer_id = $1 ORDER BY created_at DESC LIMIT 200
+		`, customerID)
 		if err != nil {
 			return err
 		}
