@@ -15,6 +15,7 @@ import {
   type Tenant,
 } from "@/lib/api";
 import { LoadingBlock } from "@/components/Spinner";
+import { TenantPaymentConfig } from "@/components/TenantPaymentConfig";
 
 const SOCIAL_TYPES = [
   "instagram",
@@ -506,6 +507,8 @@ export default function TenantProfilePage() {
           {savingSocials ? "Enregistrement..." : "Enregistrer les liens"}
         </button>
       </form>
+
+      <TenantPaymentConfig tenantId={tenantId} />
     </div>
   );
 }

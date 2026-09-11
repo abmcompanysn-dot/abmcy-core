@@ -477,6 +477,46 @@ export function setAdminAccountActive(
   });
 }
 
+/** GET /admin/tenants/{tenantID}/payment-config — indique si les clés
+ * ABMCY Core Payment du tenant sont renseignées (jamais les valeurs). */
+export function getTenantPaymentConfig(
+  adminKey: string,
+  tenantId: string
+): Promise<{ configured: boolean }> {
+  return request<{ configured: boolean }>(
+    `/admin/tenants/${encodeURIComponent(tenantId)}/payment-config`,
+    adminKey,
+    { method: "GET" }
+  );
+}
+
+/** PUT /admin/tenants/{tenantID}/payment-config — enregistre (ou remplace)
+ * les clés ABMCY Core Payment du tenant. */
+export function setTenantPaymentConfig(
+  adminKey: string,
+  tenantId: string,
+  input: { app_key: string; hmac_secret: string }
+): Promise<void> {
+  return request<void>(
+    `/admin/tenants/${encodeURIComponent(tenantId)}/payment-config`,
+    adminKey,
+    { method: "PUT", body: JSON.stringify(input) }
+  );
+}
+
+/** DELETE /admin/tenants/{tenantID}/payment-config — retire les clés de
+ * paiement du tenant (ses paiements repassent en 503). */
+export function deleteTenantPaymentConfig(
+  adminKey: string,
+  tenantId: string
+): Promise<void> {
+  return request<void>(
+    `/admin/tenants/${encodeURIComponent(tenantId)}/payment-config`,
+    adminKey,
+    { method: "DELETE" }
+  );
+}
+
 /** PUT /admin/tenants/{tenantID}/business-type — modifie le type de commerce d'un tenant. */
 export function updateTenantBusinessType(
   adminKey: string,
