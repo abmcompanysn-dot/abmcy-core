@@ -14,6 +14,7 @@ package content
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"regexp"
 	"strings"
 	"time"
@@ -262,6 +263,7 @@ func (s *Service) setStatus(ctx context.Context, tenantID, articleID uuid.UUID, 
 			RETURNING id, title, slug, coalesce(excerpt, ''), body, coalesce(category, ''), coalesce(region, ''), coalesce(cover_image_url, ''), status, is_featured, view_count, author_staff_id, published_at
 		`, articleID, tenantID, status)
 		if err := row.Scan(&a.ID, &a.Title, &a.Slug, &a.Excerpt, &a.Body, &a.Category, &a.Region, &a.CoverImageURL, &a.Status, &a.IsFeatured, &a.ViewCount, &a.AuthorStaffID, &a.PublishedAt); err != nil {
+			slog.Error("content: setStatus scan failed", "error", err, "article_id", articleID, "tenant_id", tenantID, "status", status)
 			return apierror.ErrNotFound
 		}
 		return nil
