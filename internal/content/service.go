@@ -14,7 +14,6 @@ package content
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"regexp"
 	"strings"
 	"time"
@@ -256,14 +255,13 @@ func (s *Service) setStatus(ctx context.Context, tenantID, articleID uuid.UUID, 
 	err := s.pool.WithTenant(ctx, tenantID, func(ctx context.Context, tx db.TxLike) error {
 		row := tx.QueryRow(ctx, `
 			UPDATE articles SET
-				status = $3,
-				published_at = CASE WHEN $3 = 'published' AND published_at IS NULL THEN now() ELSE published_at END,
+				status = $3::varchar,
+				published_at = CASE WHEN $3::varchar = 'published' AND published_at IS NULL THEN now() ELSE published_at END,
 				updated_at = now()
 			WHERE id = $1 AND tenant_id = $2
 			RETURNING id, title, slug, coalesce(excerpt, ''), body, coalesce(category, ''), coalesce(region, ''), coalesce(cover_image_url, ''), status, is_featured, view_count, author_staff_id, published_at
 		`, articleID, tenantID, status)
 		if err := row.Scan(&a.ID, &a.Title, &a.Slug, &a.Excerpt, &a.Body, &a.Category, &a.Region, &a.CoverImageURL, &a.Status, &a.IsFeatured, &a.ViewCount, &a.AuthorStaffID, &a.PublishedAt); err != nil {
-			slog.Error("content: setStatus scan failed", "error", err, "article_id", articleID, "tenant_id", tenantID, "status", status)
 			return apierror.ErrNotFound
 		}
 		return nil
