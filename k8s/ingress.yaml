@@ -15,6 +15,12 @@ kind: Ingress
 metadata:
   name: api-ingress
   namespace: abmcy
+  annotations:
+    # Défaut nginx (1m) trop bas pour POST /uploads/image, qui accepte
+    # jusqu'à 25 Mo côté backend (voir handlers.go maxUploadBytes) — sans
+    # ça, nginx renvoie lui-même un 413 avant que la requête n'atteigne
+    # le pod Go, quelle que soit la limite applicative.
+    nginx.ingress.kubernetes.io/proxy-body-size: "25m"
 spec:
   ingressClassName: nginx
   rules:
