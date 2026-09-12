@@ -7,6 +7,7 @@ import (
 
 	"github.com/abmcy/core/internal/auth"
 	"github.com/abmcy/core/internal/catalog"
+	"github.com/abmcy/core/internal/content"
 	"github.com/abmcy/core/internal/db"
 	"github.com/abmcy/core/internal/features"
 	authmw "github.com/abmcy/core/internal/middleware"
@@ -48,6 +49,8 @@ type Server struct {
 	gallery      *catalog.GalleryService
 	reviews      *catalog.ReviewService
 
+	content *content.Service
+
 	publicBaseURL string
 	// corsOrigins is the CORS_ORIGINS env var, split — used only as a
 	// fallback for origins that have never been set in platform_config
@@ -76,6 +79,7 @@ type Deps struct {
 	Cart          *catalog.CartService
 	Gallery       *catalog.GalleryService
 	Reviews       *catalog.ReviewService
+	Content       *content.Service
 	RateLimiter   *authmw.RateLimit
 	PublicBaseURL string
 	CorsOrigins   string
@@ -103,6 +107,7 @@ func New(d Deps) *Server {
 		cart:          d.Cart,
 		gallery:       d.Gallery,
 		reviews:       d.Reviews,
+		content:       d.Content,
 		publicBaseURL: d.PublicBaseURL,
 		corsOrigins:   strings.Split(d.CorsOrigins, ","),
 		adminAPIKey:   d.AdminAPIKey,
@@ -262,6 +267,34 @@ func (s *Server) routes(rl *authmw.RateLimit) {
 			r.Post("/reviews/{reviewID}/publish", s.handlePublishReview)
 			r.Delete("/reviews/{reviewID}", s.handleDeleteReview)
 		})
+
+		// Contenu éditorial (articles) — sixième service opt-in, pour un
+		// tenant média (tenant.BusinessMedia) plutôt qu'une vitrine
+		// e-commerce. Indépendant des cinq services catalogue ci-dessus.
+		r.Group(func(r chi.Router) {
+			r.Use(s.requireContent)
+			r.Get("/articles", s.handleListArticles)
+			r.Post("/articles", s.handleCreateArticle)
+			r.Get("/articles/{articleID}", s.handleGetArticle)
+			r.Patch("/articles/{articleID}", s.handleUpdateArticle)
+			r.Delete("/articles/{articleID}", s.handleDeleteArticle)
+			r.Post("/articles/{articleID}/publish", s.handlePublishArticle)
+			r.Post("/articles/{articleID}/unpublish", s.handleUnpublishArticle)
+		})
+	})
+
+	// Lecture publique des articles publiés — première route de données
+	// tenant-scopées sans authentification (X-API-Key/JWT) dans ce
+	// backend : un site d'actualités doit être lisible par n'importe quel
+	// visiteur anonyme. Le tenant est résolu par son slug dans l'URL
+	// (jamais par WithSystem pour lire les articles eux-mêmes — la
+	// lecture passe par pool.WithTenant comme partout ailleurs, RLS
+	// incluse) ; seuls les articles status='published' sont exposés (voir
+	// content.Service, onlyPublished forcé à true par ces handlers).
+	r.Group(func(r chi.Router) {
+		r.Get("/public/{tenantSlug}/articles", s.handlePublicListArticles)
+		r.Get("/public/{tenantSlug}/articles/{articleID}", s.handlePublicGetArticle)
+		r.Post("/public/{tenantSlug}/articles/{articleID}/view", s.handlePublicIncrementView)
 	})
 
 	// Super-admin API — separate static key, used only by ad.abmcy.com's
@@ -358,6 +391,17 @@ func (s *Server) requireStaff(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t, _ := authmw.TenantFromContext(r.Context())
 		if err := s.features.RequireStaff(r.Context(), t.ID); err != nil {
+			response.Err(w, err)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (s *Server) requireContent(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t, _ := authmw.TenantFromContext(r.Context())
+		if err := s.features.RequireContent(r.Context(), t.ID); err != nil {
 			response.Err(w, err)
 			return
 		}

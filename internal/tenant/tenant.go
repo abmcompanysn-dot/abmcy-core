@@ -24,12 +24,13 @@ const (
 	BusinessCouture BusinessType = "couture_sur_mesure"
 	BusinessGeneral BusinessType = "commerce_general"
 	BusinessDigital BusinessType = "produit_numerique"
+	BusinessMedia   BusinessType = "media"
 	BusinessOther   BusinessType = "general"
 )
 
 func ValidBusinessType(bt string) bool {
 	switch BusinessType(bt) {
-	case BusinessCouture, BusinessGeneral, BusinessDigital, BusinessOther:
+	case BusinessCouture, BusinessGeneral, BusinessDigital, BusinessMedia, BusinessOther:
 		return true
 	}
 	return false

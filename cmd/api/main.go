@@ -24,6 +24,7 @@ import (
 	"github.com/abmcy/core/internal/auth"
 	"github.com/abmcy/core/internal/catalog"
 	"github.com/abmcy/core/internal/config"
+	"github.com/abmcy/core/internal/content"
 	"github.com/abmcy/core/internal/db"
 	"github.com/abmcy/core/internal/features"
 	"github.com/abmcy/core/internal/httpserver"
@@ -98,6 +99,10 @@ func main() {
 	gallery := catalog.NewGalleryService(pool)
 	reviews := catalog.NewReviewService(pool)
 
+	// Contenu éditorial optionnel (activé par tenant via internal/features) :
+	// articles pour un tenant média (ex: MAHU), indépendant du catalogue.
+	contentSvc := content.NewService(pool)
+
 	rateLimiter := authmw.NewRateLimit(5, 20) // repli par défaut si un tenant n'a pas ses propres limites
 
 	srv := httpserver.New(httpserver.Deps{
@@ -119,6 +124,7 @@ func main() {
 		Cart:          cart,
 		Gallery:       gallery,
 		Reviews:       reviews,
+		Content:       contentSvc,
 		RateLimiter:   rateLimiter,
 		PublicBaseURL: "https://api.abmcy.com",
 		CorsOrigins:   cfg.CorsOrigins,
