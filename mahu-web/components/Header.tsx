@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import Logo from "./Logo";
 
 const CATEGORIES = ["Politique", "Économie", "Tech", "Sport", "Culture"];
 
@@ -42,10 +43,9 @@ export default function Header() {
       <nav className="mx-auto flex max-w-[1400px] items-center justify-between px-4 py-4 sm:px-8">
         <Link
           href="/"
-          className="flex items-center gap-2.5 font-[family-name:var(--font-display)] text-2xl font-black text-[var(--text-main)] no-underline"
+          className="text-[var(--text-main)] no-underline"
         >
-          MAHU
-          <span className="block h-1.5 w-10 bg-[var(--accent-red)]" />
+          <Logo />
         </Link>
 
         <div className="hidden items-center gap-5 md:flex">
