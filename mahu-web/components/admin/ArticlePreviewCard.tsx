@@ -53,6 +53,7 @@ export default function ArticlePreviewCard({
     clone.style.top = "0";
     clone.style.width = `${width}px`;
     clone.style.height = `${height}px`;
+    clone.style.overflow = "hidden";
     document.body.appendChild(clone);
 
     try {
@@ -71,6 +72,19 @@ export default function ArticlePreviewCard({
         img.className = "absolute inset-0 h-full w-full object-cover";
         clone.style.backgroundImage = "none";
         clone.insertBefore(img, clone.firstChild);
+      }
+
+      // html2canvas ne respecte pas -webkit-line-clamp (le texte complet
+      // est rendu puis déborde de la hauteur figée du clone, coupé
+      // brutalement au milieu d'une phrase) — on tronque manuellement le
+      // texte de l'extrait avant capture pour reproduire fidèlement ce
+      // que montre la carte à l'écran.
+      const excerptEl = clone.querySelector<HTMLElement>("[data-excerpt]");
+      if (excerptEl && excerptEl.textContent) {
+        const maxChars = 90;
+        const text = excerptEl.textContent;
+        excerptEl.textContent =
+          text.length > maxChars ? `${text.slice(0, maxChars).trimEnd()}…` : text;
       }
 
       const html2canvas = (await import("html2canvas")).default;
@@ -140,6 +154,7 @@ export default function ArticlePreviewCard({
             // (text-white/80) — même contournement oklab() que le dégradé
             // ci-dessus.
             <p
+              data-excerpt
               className="mt-1 line-clamp-2 text-xs"
               style={{ color: "rgba(255,255,255,0.8)" }}
             >
