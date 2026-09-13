@@ -67,10 +67,24 @@ export default function ArticlePreviewCard({
 
       const html2canvas = (await import("html2canvas")).default;
       const canvas = await html2canvas(clone, { useCORS: true });
+
+      // Un blob + URL.createObjectURL est plus fiable qu'un lien data:
+      // (base64) pour déclencher un téléchargement : les navigateurs
+      // bloquent plus facilement les gros data: URLs générés par JS sans
+      // interaction utilisateur directe suffisante.
+      const blob = await new Promise<Blob | null>((resolve) =>
+        canvas.toBlob(resolve, "image/jpeg", 0.9)
+      );
+      if (!blob) throw new Error("canvas to blob failed");
+
+      const blobUrl = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.download = `mahu_apercu_${Date.now()}.jpg`;
-      link.href = canvas.toDataURL("image/jpeg", 0.9);
+      link.href = blobUrl;
+      document.body.appendChild(link);
       link.click();
+      link.remove();
+      URL.revokeObjectURL(blobUrl);
     } catch {
       setError(
         "Impossible de générer l'image (souvent dû à une image de couverture externe qui bloque l'export). Réessayez avec une image téléversée."
