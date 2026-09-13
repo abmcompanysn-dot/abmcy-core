@@ -32,22 +32,39 @@ export default function ArticlePreviewCard({
     setError(null);
     setDownloading(true);
 
-    // Clone hors-écran de la carte, avec l'image cache-bustée : une requête
-    // fraîche évite de retomber sur une réponse déjà en cache CDN sans
-    // header CORS (mise en cache avant que la règle du bucket R2 soit
-    // configurée) — sans ce contournement il faudrait attendre l'expiration
-    // naturelle du cache pour que l'export marche.
+    // Clone hors-écran de la carte, avec l'image de couverture remplacée
+    // par une balise <img crossOrigin="anonymous"> explicitement préchargée
+    // avant d'appeler html2canvas — plus fiable qu'un simple
+    // style.backgroundImage : html2canvas peut capturer le clone avant que
+    // le navigateur ait fini de (re)télécharger un CSS background-image, ce
+    // qui produit un canvas vide ou "tainted" même quand le serveur renvoie
+    // bien les headers CORS. Le cache-bust (`?cb=...`) évite en plus de
+    // retomber sur une réponse déjà en cache CDN sans header CORS (mise en
+    // cache avant que la règle du bucket R2 soit configurée).
     const clone = cardRef.current.cloneNode(true) as HTMLElement;
-    if (coverImageUrl) {
-      const sep = coverImageUrl.includes("?") ? "&" : "?";
-      clone.style.backgroundImage = `url(${coverImageUrl}${sep}cb=${Date.now()})`;
-    }
     clone.style.position = "fixed";
     clone.style.left = "-9999px";
     clone.style.top = "0";
     document.body.appendChild(clone);
 
     try {
+      if (coverImageUrl) {
+        const sep = coverImageUrl.includes("?") ? "&" : "?";
+        const bustedUrl = `${coverImageUrl}${sep}cb=${Date.now()}`;
+
+        const img = new window.Image();
+        img.crossOrigin = "anonymous";
+        img.src = bustedUrl;
+        await new Promise<void>((resolve, reject) => {
+          img.onload = () => resolve();
+          img.onerror = () => reject(new Error("image load failed"));
+        });
+
+        img.className = "absolute inset-0 h-full w-full object-cover";
+        clone.style.backgroundImage = "none";
+        clone.insertBefore(img, clone.firstChild);
+      }
+
       const html2canvas = (await import("html2canvas")).default;
       const canvas = await html2canvas(clone, { useCORS: true });
       const link = document.createElement("a");
