@@ -1,51 +1,57 @@
-"use client";
-
-import { useEffect, useRef, useState } from "react";
-import { useParams } from "next/navigation";
+import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
-import { getArticle, incrementView, ApiError } from "@/lib/api";
-import type { Article } from "@/lib/types";
+import { getArticle, ApiError } from "@/lib/api";
 import { formatDate } from "@/lib/format";
-import { LoadingBlock } from "@/components/Spinner";
+import ArticleViewTracker from "@/components/ArticleViewTracker";
 
-export default function ArticlePage() {
-  const params = useParams<{ id: string }>();
-  const [article, setArticle] = useState<Article | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const viewedRef = useRef(false);
+type Props = { params: Promise<{ id: string }> };
 
-  useEffect(() => {
-    let cancelled = false;
-    getArticle(params.id)
-      .then((data) => {
-        if (cancelled) return;
-        setArticle(data);
-        if (!viewedRef.current) {
-          viewedRef.current = true;
-          incrementView(params.id).catch(() => {
-            // best-effort — un compteur de vues raté ne doit jamais
-            // empêcher la lecture de l'article.
-          });
-        }
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setError(
-          err instanceof ApiError
-            ? err.message
-            : "Impossible de charger cet article."
-        );
-      });
-    return () => {
-      cancelled = true;
+/** Server Component (contrairement au reste du site) : les balises
+ * Open Graph doivent être générées côté serveur pour que les crawlers de
+ * partage (WhatsApp, Facebook, Twitter) — qui n'exécutent pas le
+ * JavaScript côté client — voient le vrai titre/image/extrait de
+ * l'article plutôt que le fallback générique du layout racine. */
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { id } = await params;
+  try {
+    const article = await getArticle(id);
+    const description =
+      article.excerpt || article.body.slice(0, 160).trim() + "…";
+    return {
+      title: `${article.title} | MAHU`,
+      description,
+      openGraph: {
+        title: article.title,
+        description,
+        type: "article",
+        url: `/articles/${article.id}`,
+        images: article.cover_image_url ? [{ url: article.cover_image_url }] : [],
+      },
+      twitter: {
+        card: "summary_large_image",
+        title: article.title,
+        description,
+        images: article.cover_image_url ? [article.cover_image_url] : [],
+      },
     };
-  }, [params.id]);
+  } catch {
+    return { title: "Article | MAHU" };
+  }
+}
 
-  if (error) {
+export default async function ArticlePage({ params }: Props) {
+  const { id } = await params;
+
+  let article;
+  try {
+    article = await getArticle(id);
+  } catch (err) {
+    const message =
+      err instanceof ApiError ? err.message : "Impossible de charger cet article.";
     return (
       <main className="mx-auto max-w-3xl px-4 py-16 text-center sm:px-8">
-        <p className="mb-6 text-sm text-[var(--text-muted)]">{error}</p>
+        <p className="mb-6 text-sm text-[var(--text-muted)]">{message}</p>
         <Link href="/" className="text-sm text-[var(--accent-red)]">
           ← Retour à l&apos;accueil
         </Link>
@@ -53,16 +59,10 @@ export default function ArticlePage() {
     );
   }
 
-  if (!article) {
-    return (
-      <main className="mx-auto max-w-3xl px-4 py-16 sm:px-8">
-        <LoadingBlock label="Chargement de l'article..." />
-      </main>
-    );
-  }
-
   return (
     <main className="mx-auto max-w-3xl px-4 py-10 sm:px-8">
+      <ArticleViewTracker id={article.id} />
+
       <Link
         href="/"
         className="mb-6 inline-block text-sm text-[var(--text-muted)] no-underline hover:text-[var(--accent-red)]"

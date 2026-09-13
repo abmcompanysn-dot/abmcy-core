@@ -17,6 +17,7 @@ const playfair = Playfair_Display({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://new.mahu.cards"),
   title: "MAHU | L'Excellence de l'Information Africaine",
   description:
     "MAHU — L'information africaine de référence. Actualités, analyses et dossiers de toute l'Afrique et du monde.",
