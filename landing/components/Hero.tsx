@@ -19,11 +19,11 @@ export function Hero() {
       <div className="mx-auto flex max-w-4xl flex-col items-center px-6 py-24 text-center sm:py-32">
         <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-indigo-100 bg-indigo-50 px-4 py-1.5 text-xs font-medium text-indigo-700">
           <span className="h-1.5 w-1.5 animate-pulse-dot rounded-full bg-indigo-600" />
-          Plateforme multi-tenant pour commerces et artisans
+          Plateforme multi-tenant pour commerces, artisans et créateurs
         </div>
 
         <h1 className="text-balance text-4xl font-bold tracking-tight text-slate-900 sm:text-6xl">
-          Digitalisez votre commerce avec{" "}
+          Digitalisez votre activité avec{" "}
           <span className="text-indigo-600">ABMCY Core</span>
         </h1>
 

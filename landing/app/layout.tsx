@@ -16,9 +16,9 @@ const siteUrl = "https://cors.abmcy.com";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
-  title: "ABMCY Core — La plateforme multi-tenant pour digitaliser votre commerce",
+  title: "ABMCY Core — La plateforme multi-tenant pour digitaliser votre activité",
   description:
-    "ABMCY Core connecte commandes, paiements mobile money, photos produits et notifications dans une seule plateforme, pensée pour les commerçants et artisans ouest-africains.",
+    "ABMCY Core connecte commandes, paiements mobile money, photos produits et notifications dans une seule plateforme, pensée pour les commerçants, artisans et créateurs ouest-africains.",
   keywords: [
     "ABMCY",
     "multi-tenant",
@@ -30,9 +30,9 @@ export const metadata: Metadata = {
     "mobile money",
   ],
   openGraph: {
-    title: "ABMCY Core — La plateforme multi-tenant pour digitaliser votre commerce",
+    title: "ABMCY Core — La plateforme multi-tenant pour digitaliser votre activité",
     description:
-      "Commandes, paiements mobile money, photos produits et notifications : tout ce qu'il faut pour digitaliser un commerce, dans une seule plateforme.",
+      "Commandes, paiements mobile money, photos produits et notifications : tout ce qu'il faut pour digitaliser une activité, dans une seule plateforme.",
     url: siteUrl,
     siteName: "ABMCY Core",
     locale: "fr_FR",
