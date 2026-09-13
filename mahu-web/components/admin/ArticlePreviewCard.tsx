@@ -7,7 +7,11 @@ import { useRef, useState } from "react";
  * html2canvas). Une image de couverture externe (R2, picsum) posera un
  * canvas "tainted" pour html2canvas si le serveur ne renvoie pas de CORS
  * permissif — c'est un risque assumé de cette fonctionnalité annexe, pas
- * du contenu critique du site. */
+ * du contenu critique du site. Le paramètre de cache-bust (`?cb=...`)
+ * force une requête réseau fraîche à chaque export : une image déjà en
+ * cache CDN sans header CORS (mise en cache avant que la règle CORS du
+ * bucket R2 soit configurée) resterait sans header tant qu'elle n'expire
+ * pas naturellement — un cache-bust évite d'attendre ça. */
 export default function ArticlePreviewCard({
   title,
   category,
@@ -27,9 +31,25 @@ export default function ArticlePreviewCard({
     if (!cardRef.current) return;
     setError(null);
     setDownloading(true);
+
+    // Clone hors-écran de la carte, avec l'image cache-bustée : une requête
+    // fraîche évite de retomber sur une réponse déjà en cache CDN sans
+    // header CORS (mise en cache avant que la règle du bucket R2 soit
+    // configurée) — sans ce contournement il faudrait attendre l'expiration
+    // naturelle du cache pour que l'export marche.
+    const clone = cardRef.current.cloneNode(true) as HTMLElement;
+    if (coverImageUrl) {
+      const sep = coverImageUrl.includes("?") ? "&" : "?";
+      clone.style.backgroundImage = `url(${coverImageUrl}${sep}cb=${Date.now()})`;
+    }
+    clone.style.position = "fixed";
+    clone.style.left = "-9999px";
+    clone.style.top = "0";
+    document.body.appendChild(clone);
+
     try {
       const html2canvas = (await import("html2canvas")).default;
-      const canvas = await html2canvas(cardRef.current, { useCORS: true });
+      const canvas = await html2canvas(clone, { useCORS: true });
       const link = document.createElement("a");
       link.download = `mahu_apercu_${Date.now()}.jpg`;
       link.href = canvas.toDataURL("image/jpeg", 0.9);
@@ -39,6 +59,7 @@ export default function ArticlePreviewCard({
         "Impossible de générer l'image (souvent dû à une image de couverture externe qui bloque l'export). Réessayez avec une image téléversée."
       );
     } finally {
+      clone.remove();
       setDownloading(false);
     }
   }
