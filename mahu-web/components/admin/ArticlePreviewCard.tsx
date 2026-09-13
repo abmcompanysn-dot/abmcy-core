@@ -41,10 +41,18 @@ export default function ArticlePreviewCard({
     // bien les headers CORS. Le cache-bust (`?cb=...`) évite en plus de
     // retomber sur une réponse déjà en cache CDN sans header CORS (mise en
     // cache avant que la règle du bucket R2 soit configurée).
+    // Largeur/hauteur réelles mesurées AVANT le clonage : en position
+    // fixed et détaché de son parent flex normal, le clone perdrait sinon
+    // sa largeur contrainte et s'étirerait sur toute la largeur du
+    // viewport (l'image de couverture apparaît alors démesurément large
+    // et écrasée).
+    const { width, height } = cardRef.current.getBoundingClientRect();
     const clone = cardRef.current.cloneNode(true) as HTMLElement;
     clone.style.position = "fixed";
     clone.style.left = "-9999px";
     clone.style.top = "0";
+    clone.style.width = `${width}px`;
+    clone.style.height = `${height}px`;
     document.body.appendChild(clone);
 
     try {
