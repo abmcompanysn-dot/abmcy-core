@@ -551,7 +551,7 @@ func (s *Server) corsMiddleware(next http.Handler) http.Handler {
 			if strings.TrimSpace(allowed) == origin {
 				w.Header().Set("Access-Control-Allow-Origin", origin)
 				w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-API-Key")
-				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 				break
 			}
 		}
