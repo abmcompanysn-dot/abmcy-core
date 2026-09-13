@@ -85,9 +85,10 @@ export default function ArticlePreviewCard({
       link.click();
       link.remove();
       URL.revokeObjectURL(blobUrl);
-    } catch {
+    } catch (err) {
+      console.error("export JPG failed:", err);
       setError(
-        "Impossible de générer l'image (souvent dû à une image de couverture externe qui bloque l'export). Réessayez avec une image téléversée."
+        `Impossible de générer l'image : ${err instanceof Error ? err.message : String(err)}`
       );
     } finally {
       clone.remove();
