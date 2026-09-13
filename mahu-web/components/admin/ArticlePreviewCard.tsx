@@ -105,7 +105,19 @@ export default function ArticlePreviewCard({
           backgroundImage: coverImageUrl ? `url(${coverImageUrl})` : undefined,
         }}
       >
-        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent" />
+        <div
+          className="absolute inset-0"
+          style={{
+            // Dégradé en rgba() explicite plutôt qu'en classes Tailwind
+            // (bg-gradient-to-t from-black/90 ...) : Tailwind v4 génère ses
+            // couleurs avec transparence via oklab(), que html2canvas 1.4.1
+            // ne sait pas parser ("Attempting to parse an unsupported color
+            // function oklab") — seul cet élément (celui capturé par
+            // html2canvas) a besoin de ce contournement.
+            background:
+              "linear-gradient(to top, rgba(0,0,0,0.9), rgba(0,0,0,0.4), transparent)",
+          }}
+        />
         <div className="relative z-10">
           {category ? (
             <span className="mb-2 inline-block bg-[var(--accent-red)] px-2 py-1 text-[0.65rem] font-bold text-white uppercase">
@@ -116,9 +128,22 @@ export default function ArticlePreviewCard({
             {title || "Titre de l'article"}
           </h4>
           {excerpt ? (
-            <p className="mt-1 line-clamp-2 text-xs text-white/80">{excerpt}</p>
+            // Opacité en rgba() inline plutôt qu'en classe Tailwind
+            // (text-white/80) — même contournement oklab() que le dégradé
+            // ci-dessus.
+            <p
+              className="mt-1 line-clamp-2 text-xs"
+              style={{ color: "rgba(255,255,255,0.8)" }}
+            >
+              {excerpt}
+            </p>
           ) : null}
-          <p className="mt-2 text-[0.65rem] font-bold text-white/60">MAHU</p>
+          <p
+            className="mt-2 text-[0.65rem] font-bold"
+            style={{ color: "rgba(255,255,255,0.6)" }}
+          >
+            MAHU
+          </p>
         </div>
       </div>
 
