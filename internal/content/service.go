@@ -37,6 +37,7 @@ type Article struct {
 	Category      string     `json:"category,omitempty"`
 	Region        string     `json:"region,omitempty"`
 	CoverImageURL string     `json:"cover_image_url,omitempty"`
+	Tags          string     `json:"tags,omitempty"`
 	Status        string     `json:"status"`
 	IsFeatured    bool       `json:"is_featured"`
 	ViewCount     int        `json:"view_count"`
@@ -67,6 +68,7 @@ type CreateArticleInput struct {
 	Category      string
 	Region        string
 	CoverImageURL string
+	Tags          string
 	IsFeatured    bool
 	AuthorStaffID *uuid.UUID
 }
@@ -101,11 +103,11 @@ func (s *Service) Create(ctx context.Context, tenantID uuid.UUID, in CreateArtic
 		}
 
 		row := tx.QueryRow(ctx, `
-			INSERT INTO articles (tenant_id, title, slug, excerpt, body, category, region, cover_image_url, is_featured, author_staff_id)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-			RETURNING id, title, slug, coalesce(excerpt, ''), body, coalesce(category, ''), coalesce(region, ''), coalesce(cover_image_url, ''), status, is_featured, view_count, author_staff_id, published_at
-		`, tenantID, in.Title, slug, in.Excerpt, in.Body, in.Category, in.Region, in.CoverImageURL, in.IsFeatured, in.AuthorStaffID)
-		return row.Scan(&a.ID, &a.Title, &a.Slug, &a.Excerpt, &a.Body, &a.Category, &a.Region, &a.CoverImageURL, &a.Status, &a.IsFeatured, &a.ViewCount, &a.AuthorStaffID, &a.PublishedAt)
+			INSERT INTO articles (tenant_id, title, slug, excerpt, body, category, region, cover_image_url, tags, is_featured, author_staff_id)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+			RETURNING id, title, slug, coalesce(excerpt, ''), body, coalesce(category, ''), coalesce(region, ''), coalesce(cover_image_url, ''), coalesce(tags, ''), status, is_featured, view_count, author_staff_id, published_at
+		`, tenantID, in.Title, slug, in.Excerpt, in.Body, in.Category, in.Region, in.CoverImageURL, in.Tags, in.IsFeatured, in.AuthorStaffID)
+		return row.Scan(&a.ID, &a.Title, &a.Slug, &a.Excerpt, &a.Body, &a.Category, &a.Region, &a.CoverImageURL, &a.Tags, &a.Status, &a.IsFeatured, &a.ViewCount, &a.AuthorStaffID, &a.PublishedAt)
 	})
 	if err != nil {
 		return nil, fmt.Errorf("content: create article: %w", err)
@@ -127,7 +129,7 @@ func (s *Service) List(ctx context.Context, tenantID uuid.UUID, f ListFilter) ([
 	var articles []Article
 	err := s.pool.WithTenant(ctx, tenantID, func(ctx context.Context, tx db.TxLike) error {
 		query := `
-			SELECT id, title, slug, coalesce(excerpt, ''), '', coalesce(category, ''), coalesce(region, ''), coalesce(cover_image_url, ''), status, is_featured, view_count, author_staff_id, published_at
+			SELECT id, title, slug, coalesce(excerpt, ''), '', coalesce(category, ''), coalesce(region, ''), coalesce(cover_image_url, ''), coalesce(tags, ''), status, is_featured, view_count, author_staff_id, published_at
 			FROM articles
 			WHERE 1=1
 		`
@@ -152,7 +154,7 @@ func (s *Service) List(ctx context.Context, tenantID uuid.UUID, f ListFilter) ([
 		defer rows.Close()
 		for rows.Next() {
 			var a Article
-			if err := rows.Scan(&a.ID, &a.Title, &a.Slug, &a.Excerpt, &a.Body, &a.Category, &a.Region, &a.CoverImageURL, &a.Status, &a.IsFeatured, &a.ViewCount, &a.AuthorStaffID, &a.PublishedAt); err != nil {
+			if err := rows.Scan(&a.ID, &a.Title, &a.Slug, &a.Excerpt, &a.Body, &a.Category, &a.Region, &a.CoverImageURL, &a.Tags, &a.Status, &a.IsFeatured, &a.ViewCount, &a.AuthorStaffID, &a.PublishedAt); err != nil {
 				return err
 			}
 			articles = append(articles, a)
@@ -172,14 +174,14 @@ func (s *Service) Get(ctx context.Context, tenantID, articleID uuid.UUID, onlyPu
 	var a Article
 	err := s.pool.WithTenant(ctx, tenantID, func(ctx context.Context, tx db.TxLike) error {
 		query := `
-			SELECT id, title, slug, coalesce(excerpt, ''), body, coalesce(category, ''), coalesce(region, ''), coalesce(cover_image_url, ''), status, is_featured, view_count, author_staff_id, published_at
+			SELECT id, title, slug, coalesce(excerpt, ''), body, coalesce(category, ''), coalesce(region, ''), coalesce(cover_image_url, ''), coalesce(tags, ''), status, is_featured, view_count, author_staff_id, published_at
 			FROM articles WHERE id = $1
 		`
 		if onlyPublished {
 			query += " AND status = 'published'"
 		}
 		row := tx.QueryRow(ctx, query, articleID)
-		if err := row.Scan(&a.ID, &a.Title, &a.Slug, &a.Excerpt, &a.Body, &a.Category, &a.Region, &a.CoverImageURL, &a.Status, &a.IsFeatured, &a.ViewCount, &a.AuthorStaffID, &a.PublishedAt); err != nil {
+		if err := row.Scan(&a.ID, &a.Title, &a.Slug, &a.Excerpt, &a.Body, &a.Category, &a.Region, &a.CoverImageURL, &a.Tags, &a.Status, &a.IsFeatured, &a.ViewCount, &a.AuthorStaffID, &a.PublishedAt); err != nil {
 			return apierror.ErrNotFound
 		}
 		return nil
@@ -199,6 +201,7 @@ type UpdateArticleInput struct {
 	Category      *string
 	Region        *string
 	CoverImageURL *string
+	Tags          *string
 	IsFeatured    *bool
 }
 
@@ -213,12 +216,13 @@ func (s *Service) Update(ctx context.Context, tenantID, articleID uuid.UUID, in 
 				category = coalesce($6, category),
 				region = coalesce($7, region),
 				cover_image_url = coalesce($8, cover_image_url),
-				is_featured = coalesce($9, is_featured),
+				tags = coalesce($9, tags),
+				is_featured = coalesce($10, is_featured),
 				updated_at = now()
 			WHERE id = $1 AND tenant_id = $2
-			RETURNING id, title, slug, coalesce(excerpt, ''), body, coalesce(category, ''), coalesce(region, ''), coalesce(cover_image_url, ''), status, is_featured, view_count, author_staff_id, published_at
-		`, articleID, tenantID, in.Title, in.Excerpt, in.Body, in.Category, in.Region, in.CoverImageURL, in.IsFeatured)
-		if err := row.Scan(&a.ID, &a.Title, &a.Slug, &a.Excerpt, &a.Body, &a.Category, &a.Region, &a.CoverImageURL, &a.Status, &a.IsFeatured, &a.ViewCount, &a.AuthorStaffID, &a.PublishedAt); err != nil {
+			RETURNING id, title, slug, coalesce(excerpt, ''), body, coalesce(category, ''), coalesce(region, ''), coalesce(cover_image_url, ''), coalesce(tags, ''), status, is_featured, view_count, author_staff_id, published_at
+		`, articleID, tenantID, in.Title, in.Excerpt, in.Body, in.Category, in.Region, in.CoverImageURL, in.Tags, in.IsFeatured)
+		if err := row.Scan(&a.ID, &a.Title, &a.Slug, &a.Excerpt, &a.Body, &a.Category, &a.Region, &a.CoverImageURL, &a.Tags, &a.Status, &a.IsFeatured, &a.ViewCount, &a.AuthorStaffID, &a.PublishedAt); err != nil {
 			return apierror.ErrNotFound
 		}
 		return nil
@@ -259,9 +263,9 @@ func (s *Service) setStatus(ctx context.Context, tenantID, articleID uuid.UUID, 
 				published_at = CASE WHEN $3::varchar = 'published' AND published_at IS NULL THEN now() ELSE published_at END,
 				updated_at = now()
 			WHERE id = $1 AND tenant_id = $2
-			RETURNING id, title, slug, coalesce(excerpt, ''), body, coalesce(category, ''), coalesce(region, ''), coalesce(cover_image_url, ''), status, is_featured, view_count, author_staff_id, published_at
+			RETURNING id, title, slug, coalesce(excerpt, ''), body, coalesce(category, ''), coalesce(region, ''), coalesce(cover_image_url, ''), coalesce(tags, ''), status, is_featured, view_count, author_staff_id, published_at
 		`, articleID, tenantID, status)
-		if err := row.Scan(&a.ID, &a.Title, &a.Slug, &a.Excerpt, &a.Body, &a.Category, &a.Region, &a.CoverImageURL, &a.Status, &a.IsFeatured, &a.ViewCount, &a.AuthorStaffID, &a.PublishedAt); err != nil {
+		if err := row.Scan(&a.ID, &a.Title, &a.Slug, &a.Excerpt, &a.Body, &a.Category, &a.Region, &a.CoverImageURL, &a.Tags, &a.Status, &a.IsFeatured, &a.ViewCount, &a.AuthorStaffID, &a.PublishedAt); err != nil {
 			return apierror.ErrNotFound
 		}
 		return nil

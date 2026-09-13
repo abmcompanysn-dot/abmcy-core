@@ -36,6 +36,7 @@ func (s *Server) handleCreateArticle(w http.ResponseWriter, r *http.Request) {
 		Category      string `json:"category"`
 		Region        string `json:"region"`
 		CoverImageURL string `json:"cover_image_url"`
+		Tags          string `json:"tags"`
 		IsFeatured    bool   `json:"is_featured"`
 	}
 	if err := decodeJSON(r, &body); err != nil {
@@ -50,6 +51,7 @@ func (s *Server) handleCreateArticle(w http.ResponseWriter, r *http.Request) {
 		Category:      body.Category,
 		Region:        body.Region,
 		CoverImageURL: body.CoverImageURL,
+		Tags:          body.Tags,
 		IsFeatured:    body.IsFeatured,
 		AuthorStaffID: t.StaffUserID,
 	})
@@ -91,6 +93,7 @@ func (s *Server) handleUpdateArticle(w http.ResponseWriter, r *http.Request) {
 		Category      *string `json:"category"`
 		Region        *string `json:"region"`
 		CoverImageURL *string `json:"cover_image_url"`
+		Tags          *string `json:"tags"`
 		IsFeatured    *bool   `json:"is_featured"`
 	}
 	if err := decodeJSON(r, &body); err != nil {
@@ -105,6 +108,7 @@ func (s *Server) handleUpdateArticle(w http.ResponseWriter, r *http.Request) {
 		Category:      body.Category,
 		Region:        body.Region,
 		CoverImageURL: body.CoverImageURL,
+		Tags:          body.Tags,
 		IsFeatured:    body.IsFeatured,
 	})
 	if err != nil {
