@@ -2,24 +2,24 @@
 
 import { useRef, useState } from "react";
 import type { Article } from "@/lib/types";
+import {
+  drawBrandOverlay,
+  pickMimeType,
+  VIDEO_FORMATS,
+  type VideoFormat,
+} from "@/lib/videoBranding";
 
 /** Générateur de vidéo brandée MAHU pour le partage réseaux sociaux — pur
  * outil client (Canvas 2D + MediaRecorder → WebM), portage direct de
  * MAHU-NEW/admin.html:710-855. Aucune route backend : le fichier est
- * dessiné et encodé entièrement dans le navigateur, jamais uploadé. */
-
-type Format = "youtube" | "instagram" | "story";
-
-const FORMATS: Record<Format, { label: string; w: number; h: number }> = {
-  youtube: { label: "YouTube (1280×720)", w: 1280, h: 720 },
-  instagram: { label: "Instagram (1080×1080)", w: 1080, h: 1080 },
-  story: { label: "Story (1080×1920)", w: 1080, h: 1920 },
-};
+ * dessiné et encodé entièrement dans le navigateur, jamais uploadé.
+ * L'overlay (logo/badge/titre/point LIVE) est partagé avec
+ * VideoImportBrander.tsx via lib/videoBranding.ts. */
 
 const DURATION_MS = 6000;
 
 export default function VideoGenerator({ article }: { article: Article }) {
-  const [format, setFormat] = useState<Format>("youtube");
+  const [format, setFormat] = useState<VideoFormat>("youtube");
   const [generating, setGenerating] = useState(false);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -39,10 +39,8 @@ export default function VideoGenerator({ article }: { article: Article }) {
     setVideoUrl(null);
     setGenerating(true);
 
-    const { w: W, h: H } = FORMATS[format];
-    const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
-      ? "video/webm;codecs=vp9"
-      : "video/webm";
+    const { w: W, h: H } = VIDEO_FORMATS[format];
+    const mimeType = pickMimeType();
 
     const canvas = document.createElement("canvas");
     canvas.width = W;
@@ -82,85 +80,16 @@ export default function VideoGenerator({ article }: { article: Article }) {
       const t = Math.min(elapsed / DURATION_MS, 1);
 
       ctx!.drawImage(img, 0, 0, W, H);
-
-      const grad = ctx!.createLinearGradient(0, H * 0.25, 0, H);
-      grad.addColorStop(0, "rgba(0,0,0,0)");
-      grad.addColorStop(1, "rgba(0,0,0,0.92)");
-      ctx!.fillStyle = grad;
-      ctx!.fillRect(0, 0, W, H);
-
-      // Barre de progression rouge
-      ctx!.fillStyle = "#E31B23";
-      ctx!.fillRect(0, 0, W * t, 7);
-
-      // Logo MAHU
-      const logoSize = format === "story" ? 72 : 56;
-      ctx!.fillStyle = "white";
-      ctx!.font = `900 ${logoSize}px Georgia, serif`;
-      ctx!.fillText("MAHU", 60, 60 + logoSize * 0.8);
-      ctx!.fillStyle = "#E31B23";
-      ctx!.fillRect(60, 60 + logoSize + 5, 90, 7);
-
-      // Badge catégorie (fade-in)
-      const category = article.category || "ACTUALITÉ";
-      const catT = Math.max(0, (t - 0.2) / 0.3);
-      if (catT > 0) {
-        ctx!.save();
-        ctx!.globalAlpha = catT;
-        ctx!.font =
-          format === "story" ? "900 26px Inter,sans-serif" : "900 20px Inter,sans-serif";
-        const catW = ctx!.measureText(category.toUpperCase()).width + 32;
-        ctx!.fillStyle = "#E31B23";
-        ctx!.fillRect(60, H - (format === "story" ? 300 : 180), catW, 40);
-        ctx!.fillStyle = "white";
-        ctx!.fillText(category.toUpperCase(), 76, H - (format === "story" ? 272 : 153));
-        ctx!.restore();
-      }
-
-      // Titre (fade + glissement, retour à la ligne automatique)
-      const ttT = Math.max(0, (t - 0.35) / 0.4);
-      if (ttT > 0) {
-        ctx!.save();
-        ctx!.globalAlpha = ttT;
-        const titleSize = format === "story" ? 62 : 50;
-        ctx!.font = `700 ${titleSize}px Georgia, serif`;
-        ctx!.fillStyle = "white";
-        const maxTW = W - 120;
-        const words = article.title.split(" ");
-        let line = "";
-        const lines: string[] = [];
-        for (const word of words) {
-          const test = line + word + " ";
-          if (ctx!.measureText(test).width > maxTW && line) {
-            lines.push(line.trim());
-            line = word + " ";
-          } else {
-            line = test;
-          }
-        }
-        if (line.trim()) lines.push(line.trim());
-        const shownLines = lines.slice(0, 3);
-        const lineHeight = titleSize * 1.25;
-        const startY =
-          H - (format === "story" ? 230 : 120) - (shownLines.length - 1) * lineHeight;
-        shownLines.forEach((l, i) =>
-          ctx!.fillText(l, 60 + (1 - ttT) * 40, startY + i * lineHeight)
-        );
-        ctx!.restore();
-      }
-
-      // Point LIVE clignotant
-      const dot = (Math.sin(elapsed / 300) + 1) / 2;
-      ctx!.save();
-      ctx!.globalAlpha = 0.6 + dot * 0.4;
-      ctx!.fillStyle = "#E31B23";
-      ctx!.beginPath();
-      ctx!.arc(W - 60, 55, 10, 0, Math.PI * 2);
-      ctx!.fill();
-      ctx!.restore();
-      ctx!.fillStyle = "white";
-      ctx!.font = "bold 15px Inter,sans-serif";
-      ctx!.fillText("LIVE", W - 44, 61);
+      drawBrandOverlay({
+        ctx: ctx!,
+        width: W,
+        height: H,
+        format,
+        title: article.title,
+        category: article.category ?? "",
+        t,
+        elapsedMs: elapsed,
+      });
 
       if (elapsed < DURATION_MS) {
         rafRef.current = requestAnimationFrame(drawFrame);
@@ -185,10 +114,10 @@ export default function VideoGenerator({ article }: { article: Article }) {
       </h3>
 
       <div className="mb-4 flex flex-wrap gap-3">
-        {Object.entries(FORMATS).map(([key, f]) => (
+        {Object.entries(VIDEO_FORMATS).map(([key, f]) => (
           <button
             key={key}
-            onClick={() => setFormat(key as Format)}
+            onClick={() => setFormat(key as VideoFormat)}
             disabled={generating}
             className={`rounded px-3 py-2 text-xs font-semibold ${
               format === key

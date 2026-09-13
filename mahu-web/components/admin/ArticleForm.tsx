@@ -12,8 +12,15 @@ import {
   type ArticleInput,
 } from "@/lib/admin-api";
 import type { Article } from "@/lib/types";
+import {
+  DEFAULT_CATEGORIES,
+  addStoredCategory,
+  getStoredCategories,
+  suggestTags,
+} from "@/lib/articleHelpers";
+import ImageLibraryPicker from "./ImageLibraryPicker";
+import ArticlePreviewCard from "./ArticlePreviewCard";
 
-const CATEGORIES = ["Politique", "Économie", "Tech", "Sport", "Culture"];
 const REGIONS = ["Ouest", "Est", "Nord", "Centrale"];
 
 /** Formulaire de création OU d'édition d'un article — même composant pour
@@ -34,6 +41,7 @@ export default function ArticleForm({
   const [body, setBody] = useState(article?.body ?? "");
   const [category, setCategory] = useState(article?.category ?? "");
   const [region, setRegion] = useState(article?.region ?? "");
+  const [tags, setTags] = useState(article?.tags ?? "");
   const [isFeatured, setIsFeatured] = useState(article?.is_featured ?? false);
   const [coverImageUrl, setCoverImageUrl] = useState(
     article?.cover_image_url ?? ""
@@ -41,6 +49,29 @@ export default function ArticleForm({
   const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Lu une seule fois à l'initialisation plutôt que dans un useEffect (le
+  // localStorage ne change jamais pendant la vie du formulaire).
+  const [customCategories] = useState(() => getStoredCategories());
+  const [newCategory, setNewCategory] = useState("");
+
+  const allCategories = [...DEFAULT_CATEGORIES, ...customCategories];
+
+  function handleAddCategory() {
+    const trimmed = newCategory.trim();
+    if (!trimmed) return;
+    addStoredCategory(trimmed);
+    setCategory(trimmed);
+    setNewCategory("");
+  }
+
+  function handleSuggestTags() {
+    const suggested = suggestTags(title, excerpt);
+    if (suggested.length === 0) {
+      setError("Pas assez de texte (titre/extrait) pour suggérer des tags.");
+      return;
+    }
+    setTags(suggested.join(", "));
+  }
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -77,6 +108,7 @@ export default function ArticleForm({
       category: category.trim(),
       region: region.trim(),
       cover_image_url: coverImageUrl,
+      tags: tags.trim(),
       is_featured: isFeatured,
     };
 
@@ -119,6 +151,10 @@ export default function ArticleForm({
             />
           </label>
         </div>
+        <ImageLibraryPicker
+          selectedUrl={coverImageUrl}
+          onSelect={setCoverImageUrl}
+        />
       </div>
 
       <div>
@@ -143,15 +179,33 @@ export default function ArticleForm({
             value={category}
             onChange={(e) => setCategory(e.target.value)}
             disabled={loading}
-            className="w-full rounded border border-[var(--border-color)] bg-[var(--bg-primary)] px-3 py-2 text-[var(--text-main)]"
+            className="mb-2 w-full rounded border border-[var(--border-color)] bg-[var(--bg-primary)] px-3 py-2 text-[var(--text-main)]"
           >
             <option value="">—</option>
-            {CATEGORIES.map((c) => (
+            {allCategories.map((c) => (
               <option key={c} value={c}>
                 {c}
               </option>
             ))}
           </select>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={newCategory}
+              onChange={(e) => setNewCategory(e.target.value)}
+              placeholder="Nouvelle catégorie..."
+              disabled={loading}
+              className="w-full rounded border border-[var(--border-color)] bg-[var(--bg-primary)] px-2 py-1 text-xs text-[var(--text-main)]"
+            />
+            <button
+              type="button"
+              onClick={handleAddCategory}
+              disabled={loading}
+              className="shrink-0 rounded border border-[var(--border-color)] px-2 py-1 text-xs text-[var(--text-muted)]"
+            >
+              + Ajouter
+            </button>
+          </div>
         </div>
         <div>
           <label className="mb-1 block text-sm font-medium text-[var(--text-muted)]">
@@ -199,6 +253,29 @@ export default function ArticleForm({
         />
       </div>
 
+      <div>
+        <label className="mb-1 block text-sm font-medium text-[var(--text-muted)]">
+          Tags (séparés par des virgules)
+        </label>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={tags}
+            onChange={(e) => setTags(e.target.value)}
+            disabled={loading}
+            className="w-full rounded border border-[var(--border-color)] bg-[var(--bg-primary)] px-3 py-2 text-[var(--text-main)]"
+          />
+          <button
+            type="button"
+            onClick={handleSuggestTags}
+            disabled={loading}
+            className="shrink-0 rounded border border-[var(--border-color)] px-3 py-2 text-xs text-[var(--text-muted)]"
+          >
+            Suggérer
+          </button>
+        </div>
+      </div>
+
       <label className="flex items-center gap-2 text-sm text-[var(--text-main)]">
         <input
           type="checkbox"
@@ -223,6 +300,18 @@ export default function ArticleForm({
         >
           {loading ? "Enregistrement..." : "Enregistrer"}
         </button>
+      </div>
+
+      <div className="border-t border-[var(--border-color)] pt-5">
+        <p className="mb-3 text-sm font-medium text-[var(--text-muted)]">
+          Aperçu réseaux sociaux
+        </p>
+        <ArticlePreviewCard
+          title={title}
+          category={category}
+          excerpt={excerpt}
+          coverImageUrl={coverImageUrl}
+        />
       </div>
     </form>
   );

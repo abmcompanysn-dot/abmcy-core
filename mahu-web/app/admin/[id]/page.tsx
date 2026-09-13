@@ -8,6 +8,7 @@ import { getArticleAdmin } from "@/lib/admin-api";
 import type { Article } from "@/lib/types";
 import ArticleForm from "@/components/admin/ArticleForm";
 import VideoGenerator from "@/components/admin/VideoGenerator";
+import VideoImportBrander from "@/components/admin/VideoImportBrander";
 import { LoadingBlock } from "@/components/Spinner";
 
 export default function EditArticlePage() {
@@ -70,6 +71,7 @@ export default function EditArticlePage() {
       </div>
 
       <VideoGenerator article={article} />
+      <VideoImportBrander article={article} />
     </main>
   );
 }

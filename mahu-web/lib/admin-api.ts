@@ -165,6 +165,7 @@ export interface ArticleInput {
   category: string;
   region: string;
   cover_image_url: string;
+  tags: string;
   is_featured: boolean;
 }
 
@@ -222,5 +223,65 @@ export function uploadImage(
   return request<UploadedImage>("/uploads/image", token, {
     method: "POST",
     body: form,
+  });
+}
+
+/** Lit le rôle ("owner" | "staff") depuis le payload du JWT staff, sans
+ * vérifier sa signature — uniquement pour adapter l'affichage (ex: montrer
+ * le lien "Équipe" seulement aux owners) ; le backend est la seule source
+ * de vérité pour l'autorisation réelle (voir handleCreateStaff côté
+ * serveur, qui revérifie t.StaffRole == "owner"). Même pattern que
+ * tenant-dashboard/lib/api.ts decodeStaffRole. Renvoie null si le jeton
+ * n'est pas décodable. */
+export function decodeStaffRole(token: string): string | null {
+  try {
+    const [, payload] = token.split(".");
+    const json = atob(payload.replace(/-/g, "+").replace(/_/g, "/"));
+    const claims = JSON.parse(json) as { role?: string };
+    return claims.role ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export interface StaffUser {
+  id: string;
+  email: string;
+  role: "owner" | "staff" | string;
+  is_active: boolean;
+}
+
+export interface CreateStaffInput {
+  email: string;
+  password: string;
+  role?: "owner" | "staff";
+}
+
+/** GET /staff — liste les membres de l'équipe du tenant mahu. */
+export function listStaff(token: string): Promise<StaffUser[]> {
+  return request<StaffUser[]>("/staff", token, { method: "GET" });
+}
+
+/** POST /staff — ajoute un membre de l'équipe (réservé au rôle owner,
+ * revérifié côté serveur). */
+export function createStaff(
+  token: string,
+  input: CreateStaffInput
+): Promise<StaffUser> {
+  return request<StaffUser>("/staff", token, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+/** PUT /staff/{userID}/active — active/désactive un membre de l'équipe. */
+export function setStaffActive(
+  token: string,
+  userId: string,
+  isActive: boolean
+): Promise<void> {
+  return request<void>(`/staff/${userId}/active`, token, {
+    method: "PUT",
+    body: JSON.stringify({ is_active: isActive }),
   });
 }

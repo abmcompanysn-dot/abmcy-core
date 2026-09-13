@@ -8,6 +8,7 @@ export interface Article {
   category?: string;
   region?: string;
   cover_image_url?: string;
+  tags?: string;
   status: "draft" | "published";
   is_featured: boolean;
   view_count: number;
