@@ -208,37 +208,42 @@ export function ArchitectureAnimation() {
 
   return (
     <div ref={ref} className="relative mx-auto w-full max-w-5xl">
-      {/* Grille de blocs : 5 colonnes, 3 rangées, mêmes proportions que POSITIONS */}
-      <div className="relative grid min-h-[420px] grid-cols-5 grid-rows-3 items-center gap-3 sm:min-h-[480px] sm:gap-6">
-        {/* SVG des lignes de connexion, superposé derrière les blocs */}
-        <svg
-          viewBox="0 0 100 100"
-          preserveAspectRatio="none"
-          className="pointer-events-none absolute inset-0 h-full w-full"
-          aria-hidden
-        >
-          {CONNECTIONS.map(([from, to], i) => (
-            <ConnectionLine
-              key={`${from}-${to}`}
-              from={from}
-              to={to}
+      {/* Sur petit écran, la grille garde sa largeur naturelle (min-w) et ce
+          conteneur défile horizontalement plutôt que d'écraser les 5
+          colonnes dans l'écran — sinon blocs et texte deviennent illisibles. */}
+      <div className="overflow-x-auto pb-2">
+        {/* Grille de blocs : 5 colonnes, 3 rangées, mêmes proportions que POSITIONS */}
+        <div className="relative grid min-h-[420px] w-full min-w-[640px] grid-cols-5 grid-rows-3 items-center gap-3 sm:min-h-[480px] sm:min-w-0 sm:gap-6">
+          {/* SVG des lignes de connexion, superposé derrière les blocs */}
+          <svg
+            viewBox="0 0 100 100"
+            preserveAspectRatio="none"
+            className="pointer-events-none absolute inset-0 h-full w-full"
+            aria-hidden
+          >
+            {CONNECTIONS.map(([from, to], i) => (
+              <ConnectionLine
+                key={`${from}-${to}`}
+                from={from}
+                to={to}
+                active={isInView}
+                delay={linesStartDelay + i * lineDelayStep}
+              />
+            ))}
+          </svg>
+
+          {BLOCKS.map((block, i) => (
+            <Block
+              key={block.id}
+              block={block}
               active={isInView}
-              delay={linesStartDelay + i * lineDelayStep}
+              delay={i * blockDelayStep}
             />
           ))}
-        </svg>
-
-        {BLOCKS.map((block, i) => (
-          <Block
-            key={block.id}
-            block={block}
-            active={isInView}
-            delay={i * blockDelayStep}
-          />
-        ))}
+        </div>
       </div>
 
-      <p className="mt-8 text-center text-xs text-slate-400 sm:hidden">
+      <p className="mt-4 text-center text-xs text-slate-400 sm:hidden">
         Faites défiler horizontalement le schéma si besoin sur petit écran.
       </p>
     </div>

@@ -1,3 +1,6 @@
+import { DOCS_URL } from "@/lib/constants";
+import { MobileNav } from "./MobileNav";
+
 const NAV_LINKS = [
   { href: "#architecture", label: "Architecture" },
   { href: "#fonctionnalites", label: "Fonctionnalités" },
@@ -8,15 +11,11 @@ const NAV_LINKS = [
 // découvert par un visiteur, seulement utilisé en interne par l'équipe
 // ABMCY qui en connaît déjà l'adresse.
 const TENANT_DASHBOARD_URL = "https://dash.abmcy.com";
-// Documentation d'intégration API (docs/API.md dans le repo, servie comme
-// une vraie page du site vitrine — voir DOCS_URL dans chaque app pour
-// garder ce lien unique).
-export const DOCS_URL = "https://cors.abmcy.com/docs";
 
 export function Header() {
   return (
     <header className="sticky top-0 z-50 border-b border-slate-100 bg-white/80 backdrop-blur-md">
-      <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
+      <div className="relative mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
         <a href="#top" className="flex items-center gap-2 font-semibold text-slate-900">
           <img src="/logo.svg" alt="" width={32} height={32} />
           <span>
@@ -51,6 +50,7 @@ export function Header() {
           >
             Espace client
           </a>
+          <MobileNav />
         </div>
       </div>
     </header>
