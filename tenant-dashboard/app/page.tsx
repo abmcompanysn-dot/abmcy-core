@@ -7,6 +7,7 @@ import { STATUS_LABELS } from "@/components/OrderStatusBadge";
 import { NewOrderForm } from "@/components/NewOrderForm";
 import { OrdersTable } from "@/components/OrdersTable";
 import { LoadingBlock } from "@/components/Spinner";
+import { MobileHome } from "@/components/MobileHome";
 
 const STATUS_FILTERS: { value: string; label: string }[] = [
   { value: "", label: "Tous" },
@@ -117,25 +118,31 @@ export default function OrdersPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-slate-900">
-            Commandes
-          </h1>
-          <p className="text-sm text-slate-500">
-            Consultez et gérez les commandes de vos clients.
-          </p>
-        </div>
-        <button
-          onClick={reload}
-          disabled={loading}
-          className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 disabled:opacity-50"
-        >
-          {loading ? "Actualisation..." : "Actualiser"}
-        </button>
-      </div>
+      {/* Accueil mobile : hub avec accès rapide, remplace la vue Commandes
+          directe sur petit écran. Le desktop garde le comportement
+          existant (Commandes affichées directement sur "/"). */}
+      <MobileHome />
 
-      <NewOrderForm onCreated={handleCreated} />
+      <div className="hidden space-y-6 md:block">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold text-slate-900">
+              Commandes
+            </h1>
+            <p className="text-sm text-slate-500">
+              Consultez et gérez les commandes de vos clients.
+            </p>
+          </div>
+          <button
+            onClick={reload}
+            disabled={loading}
+            className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 disabled:opacity-50"
+          >
+            {loading ? "Actualisation..." : "Actualiser"}
+          </button>
+        </div>
+
+        <NewOrderForm onCreated={handleCreated} />
 
       <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-end gap-3">
@@ -200,26 +207,27 @@ export default function OrdersPage() {
         </div>
       </div>
 
-      {error && (
-        <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
-          {error}
-        </p>
-      )}
+        {error && (
+          <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+            {error}
+          </p>
+        )}
 
-      {loading && orders === null ? (
-        <LoadingBlock label="Chargement des commandes..." />
-      ) : (
-        <>
-          {hasActiveFilters && filteredOrders && (
-            <p className="text-xs text-slate-500">
-              {filteredOrders.length} commande
-              {filteredOrders.length !== 1 ? "s" : ""} trouvée
-              {filteredOrders.length !== 1 ? "s" : ""} sur {orders?.length ?? 0}.
-            </p>
-          )}
-          <OrdersTable orders={filteredOrders ?? []} />
-        </>
-      )}
+        {loading && orders === null ? (
+          <LoadingBlock label="Chargement des commandes..." />
+        ) : (
+          <>
+            {hasActiveFilters && filteredOrders && (
+              <p className="text-xs text-slate-500">
+                {filteredOrders.length} commande
+                {filteredOrders.length !== 1 ? "s" : ""} trouvée
+                {filteredOrders.length !== 1 ? "s" : ""} sur {orders?.length ?? 0}.
+              </p>
+            )}
+            <OrdersTable orders={filteredOrders ?? []} />
+          </>
+        )}
+      </div>
     </div>
   );
 }
