@@ -123,7 +123,7 @@ func TenantAuth(pool *db.Pool) func(http.Handler) http.Handler {
 				return
 			}
 			if !t.Active {
-				response.Err(w, apierror.ErrInvalidAPIKey)
+				response.Err(w, apierror.ErrTenantSuspended)
 				return
 			}
 

@@ -158,6 +158,30 @@ export function initPayment(
   });
 }
 
+// --- Statut du tenant ---------------------------------------------------
+
+/**
+ * Vérifie si la boutique est active avant de rendre quoi que ce soit —
+ * appelée sans clé API (endpoint public), pour rester fiable même si la
+ * clé API du storefront serait elle-même invalidée par la suspension.
+ * En cas d'erreur réseau on considère la boutique active par défaut :
+ * mieux vaut laisser passer une requête vers une API momentanément
+ * injoignable que de bloquer la boutique à tort.
+ */
+export async function isTenantActive(): Promise<boolean> {
+  try {
+    const res = await fetch(
+      `${API_BASE}/tenants/${encodeURIComponent(TENANT_SLUG)}/status`,
+      { cache: "no-store" }
+    );
+    if (!res.ok) return true;
+    const body = (await res.json()) as { is_active: boolean };
+    return body.is_active;
+  } catch {
+    return true;
+  }
+}
+
 // --- Livraison --------------------------------------------------------
 
 export function getOrderDelivery(

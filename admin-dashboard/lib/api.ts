@@ -14,6 +14,11 @@ export const API_URL =
 /** Documentation d'intégration API — page du site vitrine, pas un artifact. */
 export const DOCS_URL = "https://cors.abmcy.com/docs";
 
+/** Dashboard tenant — cible du bouton "Se connecter en tant que". */
+export const TENANT_DASHBOARD_URL =
+  process.env.NEXT_PUBLIC_TENANT_DASHBOARD_URL?.replace(/\/+$/, "") ||
+  "https://dash.abmcy.com";
+
 const ADMIN_KEY_STORAGE_KEY = "abmcy_admin_key";
 
 /** Lit la clé admin stockée localement (uniquement côté navigateur). */
@@ -390,6 +395,22 @@ export function updateTenantActive(
       method: "PUT",
       body: JSON.stringify({ is_active: isActive }),
     }
+  );
+}
+
+/**
+ * POST /admin/tenants/{tenantID}/impersonate — émet un JWT staff
+ * court (1h) pour le compte owner du tenant, sans mot de passe. Sert au
+ * bouton "Se connecter en tant que" pour le support technique.
+ */
+export function impersonateTenant(
+  adminKey: string,
+  tenantId: string
+): Promise<{ token: string }> {
+  return request<{ token: string }>(
+    `/admin/tenants/${encodeURIComponent(tenantId)}/impersonate`,
+    adminKey,
+    { method: "POST" }
   );
 }
 

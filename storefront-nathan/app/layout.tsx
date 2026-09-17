@@ -3,6 +3,8 @@ import { Poppins, Inter } from "next/font/google";
 import "./globals.css";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
+import { SuspendedNotice } from "@/components/SuspendedNotice";
+import { isTenantActive } from "@/lib/api";
 
 const poppins = Poppins({
   variable: "--font-display",
@@ -21,16 +23,24 @@ export const metadata: Metadata = {
     "Ebooks, templates et fichiers numériques prêts à télécharger, payables en Wave, Orange Money, MTN MoMo ou carte.",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  const active = await isTenantActive();
+
   return (
     <html
       lang="fr"
       className={`${poppins.variable} ${inter.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col">
-        <Header />
-        <main className="flex-1">{children}</main>
-        <Footer />
+        {active ? (
+          <>
+            <Header />
+            <main className="flex-1">{children}</main>
+            <Footer />
+          </>
+        ) : (
+          <SuspendedNotice />
+        )}
       </body>
     </html>
   );

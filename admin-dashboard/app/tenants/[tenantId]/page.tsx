@@ -17,6 +17,7 @@ import {
 import { LoadingBlock } from "@/components/Spinner";
 import { TenantPaymentConfig } from "@/components/TenantPaymentConfig";
 import { ResetOwnerPasswordButton } from "@/components/ResetOwnerPasswordButton";
+import { ImpersonateTenantButton } from "@/components/ImpersonateTenantButton";
 
 const SOCIAL_TYPES = [
   "instagram",
@@ -444,14 +445,18 @@ export default function TenantProfilePage() {
       </form>
 
       <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-5">
-        <h2 className="text-base font-semibold text-slate-900">Sécurité</h2>
+        <h2 className="text-base font-semibold text-slate-900">Sécurité & support</h2>
         <p className="text-sm text-slate-500">
-          Réinitialise le mot de passe du compte owner de ce tenant — utile
-          si le owner est bloqué et n&apos;a pas d&apos;email fonctionnel
-          pour une réinitialisation self-service.
+          Ouvrez le dashboard de ce tenant pour du support (connexion
+          temporaire, 1h) sans connaître son mot de passe, ou
+          réinitialisez le mot de passe du owner s&apos;il est bloqué sans
+          email fonctionnel.
         </p>
         {tenant && (
-          <ResetOwnerPasswordButton tenantId={tenant.id} tenantName={tenant.name} />
+          <div className="flex flex-wrap gap-2">
+            <ImpersonateTenantButton tenantId={tenant.id} tenantName={tenant.name} />
+            <ResetOwnerPasswordButton tenantId={tenant.id} tenantName={tenant.name} />
+          </div>
         )}
       </div>
 

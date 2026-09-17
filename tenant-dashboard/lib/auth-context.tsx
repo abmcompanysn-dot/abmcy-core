@@ -32,6 +32,10 @@ interface AuthContextValue {
     email: string,
     password: string
   ) => Promise<void>;
+  /** Adopte directement un JWT déjà émis par le backend (ex: lien "Se
+   * connecter en tant que" depuis l'admin-dashboard) — pas de nouvel appel
+   * réseau, le token est déjà signé et vérifié côté serveur. */
+  adoptToken: (token: string) => void;
   logout: () => void;
 }
 
@@ -84,6 +88,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     []
   );
 
+  const adoptToken = useCallback((token: string) => {
+    storeApiKey(token);
+    notifyApiKeyChanged();
+  }, []);
+
   const logout = useCallback(() => {
     // Révocation serveur du JWT (vrai logout, voir POST /auth/logout et
     // internal/auth/service.go Logout) — best-effort : la déconnexion
@@ -104,7 +113,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ apiKey, isStaffSession, login, loginWithPassword, logout }}
+      value={{ apiKey, isStaffSession, login, loginWithPassword, adoptToken, logout }}
     >
       {children}
     </AuthContext.Provider>

@@ -1065,6 +1065,25 @@ func (s *Server) handleAdminSetTenantOwnerPassword(w http.ResponseWriter, r *htt
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// handleAdminImpersonateTenant issues a short-lived staff JWT for a
+// tenant's owner account — the admin dashboard's "log in as" support
+// tool, so ABMCY staff can open a tenant's dashboard without knowing (or
+// resetting) its owner's password. See auth.Service.ImpersonateOwner.
+func (s *Server) handleAdminImpersonateTenant(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := parseUUID(chi.URLParam(r, "tenantID"))
+	if err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+
+	token, err := s.authSvc.ImpersonateOwner(r.Context(), tenantID)
+	if err != nil {
+		response.Err(w, err)
+		return
+	}
+	response.JSON(w, http.StatusOK, map[string]string{"token": token})
+}
+
 // handleAdminUploadTenantLogo lets ABMCY staff upload a tenant's logo
 // directly from the admin dashboard, without needing that tenant's own
 // X-API-Key. It reuses storage.Service.UploadProductImage — which already
@@ -1429,4 +1448,19 @@ func (s *Server) handleTrafficTopRoutes(w http.ResponseWriter, r *http.Request) 
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// handleGetTenantStatus is a public, unauthenticated lookup of whether a
+// tenant is active — a storefront needs this even when it has no working
+// API key of its own (e.g. the tenant was suspended), to show a blocked
+// page instead of a generic error. Deliberately returns only is_active,
+// nothing else about the tenant.
+func (s *Server) handleGetTenantStatus(w http.ResponseWriter, r *http.Request) {
+	slug := chi.URLParam(r, "tenantSlug")
+	t, err := s.lookupTenantBySlug(r.Context(), slug)
+	if err != nil {
+		response.Err(w, apierror.ErrNotFound)
+		return
+	}
+	response.JSON(w, http.StatusOK, map[string]bool{"is_active": t.Active})
 }

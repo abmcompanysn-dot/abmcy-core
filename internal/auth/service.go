@@ -214,3 +214,38 @@ func (s *Service) SetTenantOwnerPassword(ctx context.Context, tenantID uuid.UUID
 		return nil
 	})
 }
+
+// ImpersonateOwner issues a staff JWT for a tenant's owner account without
+// checking any password — reserved for the ABMCY super-admin dashboard's
+// "log in as" support tool (adminAuth verifies the caller is a super-admin
+// before this is ever called). The token is short-lived (1h, vs. the
+// normal 24h from Login) since it grants access without proof the human
+// behind it is actually the owner.
+func (s *Service) ImpersonateOwner(ctx context.Context, tenantID uuid.UUID) (string, error) {
+	var userID uuid.UUID
+	var role string
+	err := s.pool.WithSystem(ctx, func(ctx context.Context, tx db.TxLike) error {
+		row := tx.QueryRow(ctx, `SELECT id, role FROM users WHERE tenant_id = $1 AND role = 'owner'`, tenantID)
+		return row.Scan(&userID, &role)
+	})
+	if err != nil {
+		return "", apierror.New(404, "not_found", "Ce tenant n'a pas de compte owner.")
+	}
+
+	claims := Claims{
+		UserID:   userID,
+		TenantID: tenantID,
+		Role:     role,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ID:        uuid.NewString(),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+		},
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	signed, err := token.SignedString(s.jwtSecret)
+	if err != nil {
+		return "", fmt.Errorf("auth: sign impersonation token: %w", err)
+	}
+	return signed, nil
+}

@@ -127,6 +127,11 @@ func (s *Server) routes(rl *authmw.RateLimit) {
 	r.Use(s.corsMiddleware)
 
 	r.Get("/health", s.handleHealth)
+	// Statut public d'un tenant, sans authentification — un storefront doit
+	// pouvoir détecter un tenant suspendu (facture impayée) même quand sa
+	// propre clé API échouerait pour la même raison, afin d'afficher une
+	// page de blocage plutôt qu'une erreur générique.
+	r.Get("/tenants/{tenantSlug}/status", s.handleGetTenantStatus)
 	r.Post("/auth/login", s.handleLogin) // personnel tenant — X-API-Key reste aussi valide sur les routes métier ci-dessous
 	r.Post("/admin/auth/login", s.handleAdminLogin)
 	r.Post("/webhooks/abmcy/{tenantSlug}", s.handleABMCYPaymentWebhook)
@@ -314,6 +319,7 @@ func (s *Server) routes(rl *authmw.RateLimit) {
 		r.Post("/admin/tenants/{tenantID}/api-keys", s.handleAdminRegenerateTenantKeys)
 		r.Put("/admin/tenants/{tenantID}/active", s.handleAdminSetTenantActive)
 		r.Put("/admin/tenants/{tenantID}/owner-password", s.handleAdminSetTenantOwnerPassword)
+		r.Post("/admin/tenants/{tenantID}/impersonate", s.handleAdminImpersonateTenant)
 		r.Put("/admin/tenants/{tenantID}/rate-limit", s.handleAdminUpdateRateLimit)
 		r.Put("/admin/tenants/{tenantID}/business-type", s.handleAdminUpdateBusinessType)
 		r.Put("/admin/tenants/{tenantID}/profile", s.handleAdminUpdateTenantProfile)
@@ -467,6 +473,10 @@ func (s *Server) staffAuth(next http.Handler) http.Handler {
 			if strings.Count(token, ".") == 2 {
 				if claims, err := s.authSvc.ParseToken(r.Context(), token); err == nil {
 					t, err := authmw.LookupByID(r.Context(), s.pool, claims.TenantID)
+					if err == nil && !t.Active {
+						response.Err(w, apierror.ErrTenantSuspended)
+						return
+					}
 					if err == nil && t.Active {
 						t.StaffUserID = &claims.UserID
 						t.StaffRole = claims.Role
