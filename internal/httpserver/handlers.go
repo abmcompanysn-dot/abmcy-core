@@ -13,6 +13,7 @@ import (
 	"github.com/abmcy/core/internal/emailtemplate"
 	"github.com/abmcy/core/internal/features"
 	authmw "github.com/abmcy/core/internal/middleware"
+	"github.com/abmcy/core/internal/notification"
 	"github.com/abmcy/core/internal/order"
 	"github.com/abmcy/core/internal/platformconfig"
 	"github.com/abmcy/core/internal/tenant"
@@ -597,6 +598,64 @@ func (s *Server) handleABMCYPaymentWebhook(w http.ResponseWriter, r *http.Reques
 }
 
 // --- Notifications ------------------------------------------------------
+
+// handleSendInvoiceEmail attaches a PDF (generated client-side, sent here
+// as base64) to an email to the order's customer. The PDF itself is
+// never generated or stored server-side — this route only relays what
+// the browser already produced, exactly like handleSendEmail relays
+// arbitrary HTML the tenant provides.
+func (s *Server) handleSendInvoiceEmail(w http.ResponseWriter, r *http.Request) {
+	t, _ := authmw.TenantFromContext(r.Context())
+	orderID, err := parseUUID(chi.URLParam(r, "orderID"))
+	if err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+
+	var body struct {
+		PDFBase64 string `json:"pdf_base64"`
+		Filename  string `json:"filename"`
+	}
+	if err := decodeJSON(r, &body); err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+	if body.PDFBase64 == "" {
+		response.Err(w, apierror.New(422, "validation_error", "Le PDF de la facture est manquant."))
+		return
+	}
+
+	o, err := s.orders.Get(r.Context(), t.ID, orderID)
+	if err != nil {
+		response.Err(w, err)
+		return
+	}
+	if o.CustomerEmail == "" {
+		response.Err(w, apierror.New(422, "validation_error", "Cette commande n'a pas d'adresse email renseignée."))
+		return
+	}
+
+	filename := body.Filename
+	if filename == "" {
+		filename = "facture-" + o.OrderNumber + ".pdf"
+	}
+
+	html := emailtemplate.Render(emailtemplate.Data{
+		Heading: "Votre facture",
+		Paragraphs: []string{
+			"Bonjour " + o.CustomerName + ",",
+			"Veuillez trouver ci-joint la facture de votre commande " + o.OrderNumber + ".",
+		},
+	})
+
+	if err := s.notifications.SendEmail(r.Context(), t.ID, o.CustomerEmail, "Facture — "+o.OrderNumber, html, "invoice",
+		notification.Attachment{Filename: filename, ContentBase64: body.PDFBase64},
+	); err != nil {
+		response.Err(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
 
 func (s *Server) handleSendEmail(w http.ResponseWriter, r *http.Request) {
 	t, _ := authmw.TenantFromContext(r.Context())

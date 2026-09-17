@@ -19,6 +19,7 @@ import { OrderStatusSelect } from "@/components/OrderStatusSelect";
 import { OrderHistoryTimeline } from "@/components/OrderHistoryTimeline";
 import { EditOrderForm } from "@/components/EditOrderForm";
 import { PaymentButton } from "@/components/PaymentButton";
+import { InvoiceActions } from "@/components/InvoiceActions";
 
 const FABRIC_SOURCE_LABELS: Record<string, string> = {
   maison: "Tissu maison (catalogue)",
@@ -167,6 +168,8 @@ export default function OrderDetailPage({
               <PaymentButton order={order} />
             </div>
           </div>
+
+          <InvoiceActions order={order} />
 
           <div className="grid gap-6 lg:grid-cols-2">
             <div className="space-y-6">

@@ -33,10 +33,26 @@ func NewResendClient(apiKey, fromAddr string) (*ResendClient, error) {
 }
 
 type sendRequest struct {
-	From    string   `json:"from"`
-	To      []string `json:"to"`
-	Subject string   `json:"subject"`
-	HTML    string   `json:"html"`
+	From        string       `json:"from"`
+	To          []string     `json:"to"`
+	Subject     string       `json:"subject"`
+	HTML        string       `json:"html"`
+	Attachments []attachment `json:"attachments,omitempty"`
+}
+
+// attachment matches Resend's API shape: Content is base64-encoded file
+// bytes, Filename is what the recipient sees.
+type attachment struct {
+	Filename string `json:"filename"`
+	Content  string `json:"content"`
+}
+
+// Attachment is the public-facing type callers build — kept separate
+// from the wire-format `attachment` in case Resend's shape ever needs to
+// diverge from ours.
+type Attachment struct {
+	Filename      string
+	ContentBase64 string
 }
 
 type sendResponse struct {
@@ -54,7 +70,7 @@ func (c *ResendClient) Send(ctx context.Context, to, subject, html string) (stri
 // address (e.g. `"HANI'S" <support@core.abmcy.com>`) — lets each
 // tenant's emails look like they come from that tenant, while ABMCY
 // keeps a single verified sending domain and Resend API key.
-func (c *ResendClient) SendAs(ctx context.Context, fromName, to, subject, html string) (string, error) {
+func (c *ResendClient) SendAs(ctx context.Context, fromName, to, subject, html string, attachments ...Attachment) (string, error) {
 	from := c.fromAddr
 	if fromName != "" {
 		// c.fromAddr is either a bare address ("a@b.com") or already
@@ -66,7 +82,13 @@ func (c *ResendClient) SendAs(ctx context.Context, fromName, to, subject, html s
 		}
 		from = fmt.Sprintf("%q <%s>", fromName, addr)
 	}
-	payload := sendRequest{From: from, To: []string{to}, Subject: subject, HTML: html}
+
+	var wireAttachments []attachment
+	for _, a := range attachments {
+		wireAttachments = append(wireAttachments, attachment{Filename: a.Filename, Content: a.ContentBase64})
+	}
+
+	payload := sendRequest{From: from, To: []string{to}, Subject: subject, HTML: html, Attachments: wireAttachments}
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return "", fmt.Errorf("resend: encode: %w", err)

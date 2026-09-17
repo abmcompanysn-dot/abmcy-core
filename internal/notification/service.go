@@ -42,7 +42,7 @@ func (s *Service) resendClient() (*ResendClient, error) {
 // (e.g. `"HANI'S" <support@core.abmcy.com>`) — ABMCY keeps a single
 // verified sending domain and Resend API key across all tenants, but
 // each tenant's customers see that tenant's name, not "ABMCY CORE".
-func (s *Service) SendEmail(ctx context.Context, tenantID uuid.UUID, to, subject, html, template string) error {
+func (s *Service) SendEmail(ctx context.Context, tenantID uuid.UUID, to, subject, html, template string, attachments ...Attachment) error {
 	resend, err := s.resendClient()
 	if err != nil {
 		return err
@@ -75,7 +75,7 @@ func (s *Service) SendEmail(ctx context.Context, tenantID uuid.UUID, to, subject
 		return apierror.ErrEmailQuota
 	}
 
-	resendID, sendErr := resend.SendAs(ctx, tenantName, to, subject, html)
+	resendID, sendErr := resend.SendAs(ctx, tenantName, to, subject, html, attachments...)
 	status := "sent"
 	if sendErr != nil {
 		status = "failed"

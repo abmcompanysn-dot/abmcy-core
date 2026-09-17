@@ -576,6 +576,22 @@ export function updateOrderStatus(
   });
 }
 
+/** POST /orders/{id}/invoice-email — envoie un PDF déjà généré côté
+ * navigateur (base64, sans préfixe data URI) au client de la commande,
+ * en pièce jointe. Le backend ne génère ni ne stocke jamais le PDF
+ * lui-même — voir lib/invoice.ts pour la génération. */
+export function sendInvoiceEmail(
+  apiKey: string,
+  orderId: string,
+  pdfBase64: string,
+  filename: string
+): Promise<void> {
+  return request<void>(`/orders/${orderId}/invoice-email`, apiKey, {
+    method: "POST",
+    body: JSON.stringify({ pdf_base64: pdfBase64, filename }),
+  });
+}
+
 /** GET /orders/{id}/history — historique des statuts d'une commande. */
 export function getOrderHistory(
   apiKey: string,

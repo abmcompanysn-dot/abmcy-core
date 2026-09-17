@@ -214,6 +214,7 @@ func (s *Server) routes(rl *authmw.RateLimit) {
 		r.Patch("/orders/{orderID}", s.handleUpdateOrder)
 		r.Patch("/orders/{orderID}/status", s.handleUpdateOrderStatus)
 		r.Get("/orders/{orderID}/history", s.handleOrderHistory)
+		r.Post("/orders/{orderID}/invoice-email", s.handleSendInvoiceEmail)
 		r.Post("/custom-orders", s.handleCreateCustomOrder)
 		r.Post("/measurements", s.handleSaveMeasurements)
 		r.Post("/uploads/image", s.handleUploadImage)
