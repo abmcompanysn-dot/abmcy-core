@@ -2,14 +2,17 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { QRCodeSVG } from "qrcode.react";
 import {
   Bell,
   Box,
+  Copy,
   Image as ImageIcon,
   Layers,
   MessageSquare,
   Scissors,
   Settings,
+  Share2,
   Star,
   Users,
 } from "lucide-react";
@@ -17,9 +20,11 @@ import { useAuth } from "@/lib/auth-context";
 import { useFeatures } from "@/lib/features-context";
 import {
   ApiError,
+  getProfile,
   getTrafficSummary,
   listOrders,
   type Order,
+  type TenantProfile,
   type TrafficSummary,
 } from "@/lib/api";
 import { formatDate, formatFCFA } from "@/lib/format";
@@ -35,20 +40,25 @@ const QUICK_LINKS = [
   { href: "/avis", label: "Avis", icon: Star, feature: "reviews_enabled" as const },
 ];
 
+const DEFAULT_BRAND_COLOR = "#065f46"; // emerald-800, couleur de repli si le tenant n'en a pas défini
+
 export function MobileHome() {
   const { apiKey, isStaffSession } = useAuth();
   const { features } = useFeatures();
+  const [profile, setProfile] = useState<TenantProfile | null>(null);
   const [traffic, setTraffic] = useState<TrafficSummary | null>(null);
   const [recentOrders, setRecentOrders] = useState<Order[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (!apiKey) return;
     let cancelled = false;
 
-    Promise.all([getTrafficSummary(apiKey), listOrders(apiKey)])
-      .then(([trafficResult, orders]) => {
+    Promise.all([getProfile(apiKey), getTrafficSummary(apiKey), listOrders(apiKey)])
+      .then(([profileResult, trafficResult, orders]) => {
         if (cancelled) return;
+        setProfile(profileResult);
         setTraffic(trafficResult);
         setRecentOrders(orders.slice(0, 5));
         setError(null);
@@ -66,18 +76,47 @@ export function MobileHome() {
   }, [apiKey]);
 
   const enabledQuickLinks = QUICK_LINKS.filter((l) => features?.[l.feature]);
+  const brandColor = profile?.brand_color || DEFAULT_BRAND_COLOR;
+
+  async function handleCopyLink() {
+    if (!profile?.storefront_url) return;
+    try {
+      await navigator.clipboard.writeText(profile.storefront_url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // presse-papiers indisponible — l'utilisateur peut toujours copier
+      // le lien affiché à la main.
+    }
+  }
+
+  async function handleShare() {
+    if (!profile?.storefront_url) return;
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: profile.name,
+          url: profile.storefront_url,
+        });
+        return;
+      } catch {
+        // partage annulé ou indisponible — repli sur la copie
+      }
+    }
+    handleCopyLink();
+  }
 
   return (
     <div className="-mx-4 -mt-4 md:hidden">
-      {/* Bandeau vert : identité + activité 24h. Le motif diagonal et les
-          coins arrondis reprennent le ton "app mobile" demandé, avec les
-          seules données réellement disponibles côté API (pas de solde ni
-          de compteur de vues du site public, qui n'existent pas). */}
+      {/* Bandeau coloré : couleur de marque du tenant (brand_color), avec
+          un motif diagonal discret pour le ton "app mobile". Coins
+          arrondis en bas pour se détacher du reste de la page. */}
       <div
-        className="relative overflow-hidden rounded-b-3xl bg-emerald-800 px-5 pb-8 pt-6 text-white"
+        className="relative overflow-hidden rounded-b-3xl px-5 pb-8 pt-6 text-white"
         style={{
+          backgroundColor: brandColor,
           backgroundImage:
-            "repeating-linear-gradient(135deg, rgba(255,255,255,0.06) 0px, rgba(255,255,255,0.06) 2px, transparent 2px, transparent 14px)",
+            "repeating-linear-gradient(135deg, rgba(255,255,255,0.08) 0px, rgba(255,255,255,0.08) 2px, transparent 2px, transparent 14px)",
         }}
       >
         <div className="flex items-center justify-between">
@@ -88,6 +127,7 @@ export function MobileHome() {
           >
             <Settings className="h-4.5 w-4.5" strokeWidth={1.75} />
           </Link>
+          <span className="text-sm font-semibold">{profile?.name ?? ""}</span>
           <Link
             href="/trafic"
             className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/15 transition-colors hover:bg-white/25"
@@ -97,22 +137,54 @@ export function MobileHome() {
           </Link>
         </div>
 
-        <div className="mt-6 text-center">
-          <p className="text-xs font-medium uppercase tracking-wide text-emerald-100">
-            Activité des dernières 24h
-          </p>
-          <p className="mt-2 text-4xl font-bold tabular-nums">
-            {traffic ? traffic.request_count.toLocaleString("fr-FR") : "—"}
-            <span className="ml-2 text-base font-medium text-emerald-100">
-              requêtes
-            </span>
-          </p>
-          {traffic && (
-            <p className="mt-1 text-xs text-emerald-100">
-              {traffic.tenant_slug}
+        {profile?.storefront_url ? (
+          // Boutique publique : lien réel du site du tenant + QR partageable.
+          <div className="mt-6 flex items-center gap-4 rounded-2xl bg-white p-4 text-slate-900">
+            <div className="shrink-0 rounded-lg bg-white p-1.5">
+              <QRCodeSVG value={profile.storefront_url} size={72} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                Boutique publique
+              </p>
+              <p className="mt-1 truncate text-sm font-semibold text-slate-900">
+                {profile.storefront_url.replace(/^https?:\/\//, "")}
+              </p>
+              <div className="mt-2 flex gap-2">
+                <button
+                  onClick={handleShare}
+                  className="flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium text-white"
+                  style={{ backgroundColor: brandColor }}
+                >
+                  <Share2 className="h-3 w-3" strokeWidth={2} />
+                  Partager
+                </button>
+                <button
+                  onClick={handleCopyLink}
+                  className="flex items-center gap-1 rounded-full border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600"
+                >
+                  <Copy className="h-3 w-3" strokeWidth={2} />
+                  {copied ? "Copié" : "Copier"}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          // Pas de site public renseigné : on retombe sur l'indicateur
+          // d'activité (nombre de requêtes API des dernières 24h — la
+          // seule donnée d'activité réellement disponible).
+          <div className="mt-6 text-center">
+            <p className="text-xs font-medium uppercase tracking-wide text-white/80">
+              Activité des dernières 24h
             </p>
-          )}
-        </div>
+            <p className="mt-2 text-4xl font-bold tabular-nums">
+              {traffic ? traffic.request_count.toLocaleString("fr-FR") : "—"}
+              <span className="ml-2 text-base font-medium text-white/80">
+                requêtes
+              </span>
+            </p>
+          </div>
+        )}
       </div>
 
       <div className="px-1 pt-6">
@@ -124,15 +196,15 @@ export function MobileHome() {
 
         {/* Grille d'accès rapide */}
         <div className="grid grid-cols-4 gap-3">
-          <QuickLink href="/" label="Commandes" icon={Layers} />
+          <QuickLink href="/" label="Commandes" icon={Layers} color={brandColor} />
           {enabledQuickLinks.map((l) => (
-            <QuickLink key={l.href} href={l.href} label={l.label} icon={l.icon} />
+            <QuickLink key={l.href} href={l.href} label={l.label} icon={l.icon} color={brandColor} />
           ))}
           {isStaffSession && (
-            <QuickLink href="/clients" label="Clients" icon={Users} />
+            <QuickLink href="/clients" label="Clients" icon={Users} color={brandColor} />
           )}
           {isStaffSession && features?.staff_enabled && (
-            <QuickLink href="/equipe" label="Équipe" icon={MessageSquare} />
+            <QuickLink href="/equipe" label="Équipe" icon={MessageSquare} color={brandColor} />
           )}
         </div>
 
@@ -144,7 +216,8 @@ export function MobileHome() {
             </h2>
             <Link
               href="/"
-              className="text-xs font-medium text-emerald-700 hover:underline"
+              className="text-xs font-medium hover:underline"
+              style={{ color: brandColor }}
             >
               Tout voir
             </Link>
@@ -192,14 +265,19 @@ function QuickLink({
   href,
   label,
   icon: Icon,
+  color,
 }: {
   href: string;
   label: string;
   icon: typeof Box;
+  color: string;
 }) {
   return (
     <Link href={href} className="flex flex-col items-center gap-1.5">
-      <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700">
+      <span
+        className="flex h-14 w-14 items-center justify-center rounded-2xl"
+        style={{ backgroundColor: `${color}1a`, color }}
+      >
         <Icon className="h-5.5 w-5.5" strokeWidth={1.75} />
       </span>
       <span className="text-center text-xs font-medium text-slate-700">

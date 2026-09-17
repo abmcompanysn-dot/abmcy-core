@@ -615,6 +615,25 @@ export function getFeatures(apiKey: string): Promise<Features> {
   return request<Features>("/features", apiKey, { method: "GET" });
 }
 
+// --- Profil du tenant ---------------------------------------------------
+
+export interface TenantProfile {
+  id: string;
+  name: string;
+  slug: string;
+  business_type: string;
+  brand_color?: string;
+  logo_url?: string;
+  tagline?: string;
+  storefront_url?: string;
+}
+
+/** GET /profile — profil public du tenant connecté (nom, couleur de
+ * marque, lien de sa boutique) — sans accès admin. */
+export function getProfile(apiKey: string): Promise<TenantProfile> {
+  return request<TenantProfile>("/profile", apiKey, { method: "GET" });
+}
+
 // --- Trafic -------------------------------------------------------------
 
 export type TrafficSummary = {
