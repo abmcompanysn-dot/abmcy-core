@@ -62,6 +62,10 @@ type Tenant struct {
 	BrandColor   string `json:"brand_color,omitempty"`
 	Tagline      string `json:"tagline,omitempty"`
 	Language     string `json:"language"`
+	// StorefrontURL is the tenant's own public site (e.g. Nathan's
+	// storefront, or HANNIFA for HANI'S) — not necessarily hosted by
+	// ABMCY, just referenced for sharing (QR code, "see my shop" link).
+	StorefrontURL string `json:"storefront_url,omitempty"`
 }
 
 // Social is one social/contact link a tenant displays publicly (Instagram,
@@ -130,11 +134,11 @@ func (s *Service) Create(ctx context.Context, name, slug, contactEmail, business
 			INSERT INTO tenants (name, slug, contact_email, api_key_public, api_key_secret_hash, business_type)
 			VALUES ($1, $2, $3, $4, $5, $6)
 			RETURNING id, name, slug, coalesce(contact_email, ''), api_key_public, plan, business_type, storage_limit_bytes, storage_used_bytes, email_quota_per_day, rate_limit_per_sec, rate_limit_burst, is_active,
-				coalesce(contact_name, ''), coalesce(contact_phone, ''), coalesce(contact_role, ''), coalesce(logo_url, ''), coalesce(brand_color, ''), coalesce(tagline, ''), language
+				coalesce(contact_name, ''), coalesce(contact_phone, ''), coalesce(contact_role, ''), coalesce(logo_url, ''), coalesce(brand_color, ''), coalesce(tagline, ''), language, coalesce(storefront_url, '')
 		`, name, slug, contactEmail, pubKey, string(secretHash), businessType)
 		return row.Scan(&t.ID, &t.Name, &t.Slug, &t.ContactEmail, &t.APIKeyPublic, &t.Plan, &t.BusinessType,
 			&t.StorageLimitBytes, &t.StorageUsedBytes, &t.EmailQuotaPerDay, &t.RateLimitPerSec, &t.RateLimitBurst, &t.IsActive,
-			&t.ContactName, &t.ContactPhone, &t.ContactRole, &t.LogoURL, &t.BrandColor, &t.Tagline, &t.Language)
+			&t.ContactName, &t.ContactPhone, &t.ContactRole, &t.LogoURL, &t.BrandColor, &t.Tagline, &t.Language, &t.StorefrontURL)
 	})
 	if err != nil {
 		return nil, fmt.Errorf("tenant: create: %w", err)
@@ -170,7 +174,7 @@ func (s *Service) ListAll(ctx context.Context) ([]Tenant, error) {
 	err := s.pool.WithSystem(ctx, func(ctx context.Context, tx db.TxLike) error {
 		rows, err := tx.Query(ctx, `
 			SELECT id, name, slug, coalesce(contact_email, ''), api_key_public, plan, business_type, storage_limit_bytes, storage_used_bytes, email_quota_per_day, rate_limit_per_sec, rate_limit_burst, is_active,
-				coalesce(contact_name, ''), coalesce(contact_phone, ''), coalesce(contact_role, ''), coalesce(logo_url, ''), coalesce(brand_color, ''), coalesce(tagline, ''), language
+				coalesce(contact_name, ''), coalesce(contact_phone, ''), coalesce(contact_role, ''), coalesce(logo_url, ''), coalesce(brand_color, ''), coalesce(tagline, ''), language, coalesce(storefront_url, '')
 			FROM tenants ORDER BY created_at DESC
 		`)
 		if err != nil {
@@ -181,7 +185,7 @@ func (s *Service) ListAll(ctx context.Context) ([]Tenant, error) {
 			var t Tenant
 			if err := rows.Scan(&t.ID, &t.Name, &t.Slug, &t.ContactEmail, &t.APIKeyPublic, &t.Plan, &t.BusinessType,
 				&t.StorageLimitBytes, &t.StorageUsedBytes, &t.EmailQuotaPerDay, &t.RateLimitPerSec, &t.RateLimitBurst, &t.IsActive,
-				&t.ContactName, &t.ContactPhone, &t.ContactRole, &t.LogoURL, &t.BrandColor, &t.Tagline, &t.Language); err != nil {
+				&t.ContactName, &t.ContactPhone, &t.ContactRole, &t.LogoURL, &t.BrandColor, &t.Tagline, &t.Language, &t.StorefrontURL); err != nil {
 				return err
 			}
 			tenants = append(tenants, t)
@@ -194,14 +198,15 @@ func (s *Service) ListAll(ctx context.Context) ([]Tenant, error) {
 // UpdateProfileInput mirrors catalog.UpdateProductInput's pattern: every
 // field is a pointer, nil means "leave unchanged" (PATCH semantics).
 type UpdateProfileInput struct {
-	ContactEmail *string
-	ContactName  *string
-	ContactPhone *string
-	ContactRole  *string
-	LogoURL      *string
-	BrandColor   *string
-	Tagline      *string
-	Language     *string
+	ContactEmail  *string
+	ContactName   *string
+	ContactPhone  *string
+	ContactRole   *string
+	LogoURL       *string
+	BrandColor    *string
+	Tagline       *string
+	Language      *string
+	StorefrontURL *string
 }
 
 // UpdateProfile lets the super-admin dashboard (or, later, a tenant's own
@@ -220,14 +225,15 @@ func (s *Service) UpdateProfile(ctx context.Context, tenantID uuid.UUID, in Upda
 				brand_color = coalesce($6, brand_color),
 				tagline = coalesce($7, tagline),
 				language = coalesce($8, language),
+				storefront_url = coalesce($10, storefront_url),
 				updated_at = now()
 			WHERE id = $1
 			RETURNING id, name, slug, coalesce(contact_email, ''), api_key_public, plan, business_type, storage_limit_bytes, storage_used_bytes, email_quota_per_day, rate_limit_per_sec, rate_limit_burst, is_active,
-				coalesce(contact_name, ''), coalesce(contact_phone, ''), coalesce(contact_role, ''), coalesce(logo_url, ''), coalesce(brand_color, ''), coalesce(tagline, ''), language
-		`, tenantID, in.ContactName, in.ContactPhone, in.ContactRole, in.LogoURL, in.BrandColor, in.Tagline, in.Language, in.ContactEmail)
+				coalesce(contact_name, ''), coalesce(contact_phone, ''), coalesce(contact_role, ''), coalesce(logo_url, ''), coalesce(brand_color, ''), coalesce(tagline, ''), language, coalesce(storefront_url, '')
+		`, tenantID, in.ContactName, in.ContactPhone, in.ContactRole, in.LogoURL, in.BrandColor, in.Tagline, in.Language, in.ContactEmail, in.StorefrontURL)
 		if err := row.Scan(&t.ID, &t.Name, &t.Slug, &t.ContactEmail, &t.APIKeyPublic, &t.Plan, &t.BusinessType,
 			&t.StorageLimitBytes, &t.StorageUsedBytes, &t.EmailQuotaPerDay, &t.RateLimitPerSec, &t.RateLimitBurst, &t.IsActive,
-			&t.ContactName, &t.ContactPhone, &t.ContactRole, &t.LogoURL, &t.BrandColor, &t.Tagline, &t.Language); err != nil {
+			&t.ContactName, &t.ContactPhone, &t.ContactRole, &t.LogoURL, &t.BrandColor, &t.Tagline, &t.Language, &t.StorefrontURL); err != nil {
 			return apierror.ErrNotFound
 		}
 		return nil
@@ -351,6 +357,28 @@ func (s *Service) SetActive(ctx context.Context, tenantID uuid.UUID, active bool
 	})
 }
 
+// Get returns one tenant by ID — used by the tenant's own dashboard to
+// read its public profile (name, brand color, storefront link) via
+// GET /profile, since a tenant only ever needs its own record, never
+// another tenant's.
+func (s *Service) Get(ctx context.Context, tenantID uuid.UUID) (*Tenant, error) {
+	var t Tenant
+	err := s.pool.WithSystem(ctx, func(ctx context.Context, tx db.TxLike) error {
+		row := tx.QueryRow(ctx, `
+			SELECT id, name, slug, coalesce(contact_email, ''), api_key_public, plan, business_type, storage_limit_bytes, storage_used_bytes, email_quota_per_day, rate_limit_per_sec, rate_limit_burst, is_active,
+				coalesce(contact_name, ''), coalesce(contact_phone, ''), coalesce(contact_role, ''), coalesce(logo_url, ''), coalesce(brand_color, ''), coalesce(tagline, ''), language, coalesce(storefront_url, '')
+			FROM tenants WHERE id = $1
+		`, tenantID)
+		return row.Scan(&t.ID, &t.Name, &t.Slug, &t.ContactEmail, &t.APIKeyPublic, &t.Plan, &t.BusinessType,
+			&t.StorageLimitBytes, &t.StorageUsedBytes, &t.EmailQuotaPerDay, &t.RateLimitPerSec, &t.RateLimitBurst, &t.IsActive,
+			&t.ContactName, &t.ContactPhone, &t.ContactRole, &t.LogoURL, &t.BrandColor, &t.Tagline, &t.Language, &t.StorefrontURL)
+	})
+	if err != nil {
+		return nil, apierror.ErrNotFound
+	}
+	return &t, nil
+}
+
 // RegenerateAPIKeys issues a fresh public/secret key pair for an existing
 // tenant (e.g. the old key leaked, or a staff member left). The old
 // api_key_public stops authenticating the moment this commits, since
@@ -376,11 +404,11 @@ func (s *Service) RegenerateAPIKeys(ctx context.Context, tenantID uuid.UUID) (*C
 			UPDATE tenants SET api_key_public = $1, api_key_secret_hash = $2, updated_at = now()
 			WHERE id = $3
 			RETURNING id, name, slug, coalesce(contact_email, ''), api_key_public, plan, business_type, storage_limit_bytes, storage_used_bytes, email_quota_per_day, rate_limit_per_sec, rate_limit_burst, is_active,
-				coalesce(contact_name, ''), coalesce(contact_phone, ''), coalesce(contact_role, ''), coalesce(logo_url, ''), coalesce(brand_color, ''), coalesce(tagline, ''), language
+				coalesce(contact_name, ''), coalesce(contact_phone, ''), coalesce(contact_role, ''), coalesce(logo_url, ''), coalesce(brand_color, ''), coalesce(tagline, ''), language, coalesce(storefront_url, '')
 		`, pubKey, string(secretHash), tenantID)
 		return row.Scan(&t.ID, &t.Name, &t.Slug, &t.ContactEmail, &t.APIKeyPublic, &t.Plan, &t.BusinessType,
 			&t.StorageLimitBytes, &t.StorageUsedBytes, &t.EmailQuotaPerDay, &t.RateLimitPerSec, &t.RateLimitBurst, &t.IsActive,
-			&t.ContactName, &t.ContactPhone, &t.ContactRole, &t.LogoURL, &t.BrandColor, &t.Tagline, &t.Language)
+			&t.ContactName, &t.ContactPhone, &t.ContactRole, &t.LogoURL, &t.BrandColor, &t.Tagline, &t.Language, &t.StorefrontURL)
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, apierror.ErrNotFound

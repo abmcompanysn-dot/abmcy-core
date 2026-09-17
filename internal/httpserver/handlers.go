@@ -852,14 +852,15 @@ func (s *Server) handleAdminUpdateTenantProfile(w http.ResponseWriter, r *http.R
 	}
 
 	var body struct {
-		ContactEmail *string `json:"contact_email"`
-		ContactName  *string `json:"contact_name"`
-		ContactPhone *string `json:"contact_phone"`
-		ContactRole  *string `json:"contact_role"`
-		LogoURL      *string `json:"logo_url"`
-		BrandColor   *string `json:"brand_color"`
-		Tagline      *string `json:"tagline"`
-		Language     *string `json:"language"`
+		ContactEmail  *string `json:"contact_email"`
+		ContactName   *string `json:"contact_name"`
+		ContactPhone  *string `json:"contact_phone"`
+		ContactRole   *string `json:"contact_role"`
+		LogoURL       *string `json:"logo_url"`
+		BrandColor    *string `json:"brand_color"`
+		Tagline       *string `json:"tagline"`
+		Language      *string `json:"language"`
+		StorefrontURL *string `json:"storefront_url"`
 	}
 	if err := decodeJSON(r, &body); err != nil {
 		response.Err(w, apierror.ErrValidation)
@@ -867,14 +868,15 @@ func (s *Server) handleAdminUpdateTenantProfile(w http.ResponseWriter, r *http.R
 	}
 
 	t, err := s.tenants.UpdateProfile(r.Context(), tenantID, tenant.UpdateProfileInput{
-		ContactEmail: body.ContactEmail,
-		ContactName:  body.ContactName,
-		ContactPhone: body.ContactPhone,
-		ContactRole:  body.ContactRole,
-		LogoURL:      body.LogoURL,
-		BrandColor:   body.BrandColor,
-		Tagline:      body.Tagline,
-		Language:     body.Language,
+		ContactEmail:  body.ContactEmail,
+		ContactName:   body.ContactName,
+		ContactPhone:  body.ContactPhone,
+		ContactRole:   body.ContactRole,
+		LogoURL:       body.LogoURL,
+		BrandColor:    body.BrandColor,
+		Tagline:       body.Tagline,
+		Language:      body.Language,
+		StorefrontURL: body.StorefrontURL,
 	})
 	if err != nil {
 		response.Err(w, err)
@@ -1067,6 +1069,20 @@ func (s *Server) handleAdminGetFeatures(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	response.JSON(w, http.StatusOK, flags)
+}
+
+// handleGetProfile lets a tenant's own dashboard read its public profile
+// (name, brand color, logo, storefront link) without needing admin
+// access — used by the mobile hub to theme itself and show a QR/link to
+// the tenant's own site.
+func (s *Server) handleGetProfile(w http.ResponseWriter, r *http.Request) {
+	t, _ := authmw.TenantFromContext(r.Context())
+	profile, err := s.tenants.Get(r.Context(), t.ID)
+	if err != nil {
+		response.Err(w, err)
+		return
+	}
+	response.JSON(w, http.StatusOK, profile)
 }
 
 // handleGetFeatures lets a tenant's own dashboard know whether the

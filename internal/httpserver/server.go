@@ -161,6 +161,7 @@ func (s *Server) routes(rl *authmw.RateLimit) {
 		}
 
 		r.Get("/features", s.handleGetFeatures)
+		r.Get("/profile", s.handleGetProfile)
 
 		r.Get("/traffic", s.handleTrafficSummary)
 		r.Get("/traffic/top-routes", s.handleTrafficTopRoutes)
