@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/abmcy/core/internal/db"
@@ -11,6 +12,30 @@ import (
 	"github.com/abmcy/core/pkg/apierror"
 	"github.com/google/uuid"
 )
+
+// allowedImageTypes is the strict allowlist for anything served publicly
+// from the R2 bucket domain (img.abmcy.com) — deliberately excludes
+// image/svg+xml, which can carry embedded <script> and would otherwise
+// execute in the bucket's own origin if opened directly in a browser.
+var allowedImageTypes = map[string]bool{
+	"image/jpeg": true,
+	"image/png":  true,
+	"image/webp": true,
+	"image/gif":  true,
+}
+
+// sniffContentType ignores whatever Content-Type the uploading client
+// claims and derives it from the actual file bytes instead — a client
+// can freely lie about the header on a multipart upload, and trusting it
+// would let an arbitrary file (including an HTML/SVG document with
+// embedded script) be stored and later served under a misleading type.
+func sniffContentType(data []byte) string {
+	n := len(data)
+	if n > 512 {
+		n = 512
+	}
+	return http.DetectContentType(data[:n])
+}
 
 type Service struct {
 	pool   *db.Pool
@@ -55,6 +80,16 @@ func (s *Service) r2Client() (*R2Client, error) {
 // resulting URL and increments storage_used_bytes — all inside the
 // tenant's RLS transaction so quota checks stay race-free per tenant.
 func (s *Service) UploadProductImage(ctx context.Context, tenantID uuid.UUID, productID *uuid.UUID, filename, contentType string, data []byte) (*UploadedImage, error) {
+	// The declared Content-Type is untrusted — this endpoint is served
+	// publicly from the bucket's own domain, so anything other than a
+	// real raster image (e.g. an SVG with embedded script, or an HTML
+	// document) must be rejected before it ever reaches storage.
+	detected := sniffContentType(data)
+	if !allowedImageTypes[detected] {
+		return nil, apierror.New(422, "invalid_image", "Le fichier envoyé n'est pas une image valide (JPEG, PNG, WebP ou GIF).")
+	}
+	contentType = detected
+
 	r2, err := s.r2Client()
 	if err != nil {
 		return nil, err
@@ -121,6 +156,13 @@ type ProductFile struct {
 // "private/" prefix (never served from the public bucket domain) and
 // records it against the tenant's storage quota, same as product images.
 func (s *Service) UploadProductFile(ctx context.Context, tenantID, productID uuid.UUID, filename, contentType string, data []byte) (*ProductFile, error) {
+	// Deliverables are legitimately arbitrary (ebooks, archives...), so
+	// nothing is rejected here — but the declared Content-Type is still
+	// untrusted, and these are only ever served through a short-lived
+	// presigned URL (see PresignedFilesForOrder), never the public bucket
+	// domain, so a sniffed type is enough without an allowlist.
+	contentType = sniffContentType(data)
+
 	r2, err := s.r2Client()
 	if err != nil {
 		return nil, err

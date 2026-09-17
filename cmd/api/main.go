@@ -106,6 +106,12 @@ func main() {
 	contentSvc := content.NewService(pool)
 
 	rateLimiter := authmw.NewRateLimit(5, 20) // repli par défaut si un tenant n'a pas ses propres limites
+	// Limite dédiée aux routes d'authentification publiques (pas encore de
+	// tenant résolu, donc keyée par IP) — beaucoup plus stricte que la
+	// limite générale, pour freiner le brute-force sur les mots de passe
+	// (staff, super-admin, clients finaux) sans avoir besoin d'un compte
+	// déjà valide pour être protégé.
+	authRateLimiter := authmw.NewRateLimit(1, 5)
 
 	// Résiliation automatique des tenants en impayé prolongé (voir
 	// subscription.gracePeriod) — vérifié une fois par jour, suffisant
@@ -128,30 +134,31 @@ func main() {
 	}()
 
 	srv := httpserver.New(httpserver.Deps{
-		Pool:          pool,
-		Tenants:       tenants,
-		Auth:          authSvc,
-		Orders:        orders,
-		Storage:       storageSvc,
-		Payments:      payments,
-		TenantPayment: tenantPayment,
-		Notifications: notifications,
-		Config:        platformCfg,
-		Traffic:       trafficSvc,
-		Features:      featuresSvc,
-		Subscriptions: subscriptions,
-		Products:      products,
-		Fabrics:       fabrics,
-		Customers:     customers,
-		Measurements:  measurements,
-		Cart:          cart,
-		Gallery:       gallery,
-		Reviews:       reviews,
-		Content:       contentSvc,
-		RateLimiter:   rateLimiter,
-		PublicBaseURL: "https://api.abmcy.com",
-		CorsOrigins:   cfg.CorsOrigins,
-		AdminAPIKey:   cfg.AdminAPIKey,
+		Pool:            pool,
+		Tenants:         tenants,
+		Auth:            authSvc,
+		Orders:          orders,
+		Storage:         storageSvc,
+		Payments:        payments,
+		TenantPayment:   tenantPayment,
+		Notifications:   notifications,
+		Config:          platformCfg,
+		Traffic:         trafficSvc,
+		Features:        featuresSvc,
+		Subscriptions:   subscriptions,
+		Products:        products,
+		Fabrics:         fabrics,
+		Customers:       customers,
+		Measurements:    measurements,
+		Cart:            cart,
+		Gallery:         gallery,
+		Reviews:         reviews,
+		Content:         contentSvc,
+		RateLimiter:     rateLimiter,
+		AuthRateLimiter: authRateLimiter,
+		PublicBaseURL:   "https://api.abmcy.com",
+		CorsOrigins:     cfg.CorsOrigins,
+		AdminAPIKey:     cfg.AdminAPIKey,
 	})
 
 	httpSrv := &http.Server{

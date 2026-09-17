@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"path"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -11,6 +12,14 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/google/uuid"
 )
+
+// sanitizeFilename keeps only the base name of a client-supplied filename
+// — it's appended as a suffix to a server-generated key, but without
+// this a filename containing "/" (or "..") could still shift where under
+// the tenant's own prefix the object lands.
+func sanitizeFilename(filename string) string {
+	return path.Base(path.Clean("/" + filename))
+}
 
 // R2Client uploads image bytes to a Cloudflare R2 bucket. R2 speaks the S3
 // API, so we reuse the AWS SDK pointed at R2's account-scoped endpoint
@@ -64,7 +73,7 @@ func NewR2Client(cfg R2Config) (*R2Client, error) {
 // another) and returns the public URL served via the bucket's custom
 // domain (configured separately in the Cloudflare dashboard).
 func (c *R2Client) Upload(ctx context.Context, tenantID uuid.UUID, filename string, contentType string, data []byte) (*UploadResult, error) {
-	key := fmt.Sprintf("%s/%s-%s", tenantID.String(), uuid.NewString(), filename)
+	key := fmt.Sprintf("%s/%s-%s", tenantID.String(), uuid.NewString(), sanitizeFilename(filename))
 	if err := c.putObject(ctx, key, contentType, data); err != nil {
 		return nil, err
 	}
@@ -83,7 +92,7 @@ func (c *R2Client) Upload(ctx context.Context, tenantID uuid.UUID, filename stri
 // custom domain (if ever misconfigured to serve the whole bucket) can be
 // scoped to exclude "private/" entirely.
 func (c *R2Client) UploadPrivate(ctx context.Context, tenantID uuid.UUID, filename string, contentType string, data []byte) (*UploadResult, error) {
-	key := fmt.Sprintf("private/%s/%s-%s", tenantID.String(), uuid.NewString(), filename)
+	key := fmt.Sprintf("private/%s/%s-%s", tenantID.String(), uuid.NewString(), sanitizeFilename(filename))
 	if err := c.putObject(ctx, key, contentType, data); err != nil {
 		return nil, err
 	}

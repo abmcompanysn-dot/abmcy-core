@@ -63,30 +63,31 @@ type Server struct {
 }
 
 type Deps struct {
-	Pool          *db.Pool
-	Tenants       *tenant.Service
-	Auth          *auth.Service
-	Orders        *order.Service
-	Storage       *storage.Service
-	Payments      *payment.Service
-	TenantPayment *tenantpayment.Service
-	Notifications *notification.Service
-	Config        *platformconfig.Service
-	Traffic       *traffic.Service
-	Features      *features.Service
-	Subscriptions *subscription.Service
-	Products      *catalog.ProductService
-	Fabrics       *catalog.FabricService
-	Customers     *catalog.CustomerService
-	Measurements  *catalog.MeasurementService
-	Cart          *catalog.CartService
-	Gallery       *catalog.GalleryService
-	Reviews       *catalog.ReviewService
-	Content       *content.Service
-	RateLimiter   *authmw.RateLimit
-	PublicBaseURL string
-	CorsOrigins   string
-	AdminAPIKey   string // separate, high-privilege key for the super-admin dashboard
+	Pool            *db.Pool
+	Tenants         *tenant.Service
+	Auth            *auth.Service
+	Orders          *order.Service
+	Storage         *storage.Service
+	Payments        *payment.Service
+	TenantPayment   *tenantpayment.Service
+	Notifications   *notification.Service
+	Config          *platformconfig.Service
+	Traffic         *traffic.Service
+	Features        *features.Service
+	Subscriptions   *subscription.Service
+	Products        *catalog.ProductService
+	Fabrics         *catalog.FabricService
+	Customers       *catalog.CustomerService
+	Measurements    *catalog.MeasurementService
+	Cart            *catalog.CartService
+	Gallery         *catalog.GalleryService
+	Reviews         *catalog.ReviewService
+	Content         *content.Service
+	RateLimiter     *authmw.RateLimit
+	AuthRateLimiter *authmw.RateLimit // limite dédiée aux routes d'auth publiques (login, register, forgot-password), keyée par IP
+	PublicBaseURL   string
+	CorsOrigins     string
+	AdminAPIKey     string // separate, high-privilege key for the super-admin dashboard
 }
 
 func New(d Deps) *Server {
@@ -116,13 +117,13 @@ func New(d Deps) *Server {
 		corsOrigins:   strings.Split(d.CorsOrigins, ","),
 		adminAPIKey:   d.AdminAPIKey,
 	}
-	s.routes(d.RateLimiter)
+	s.routes(d.RateLimiter, d.AuthRateLimiter)
 	return s
 }
 
 func (s *Server) Handler() http.Handler { return s.router }
 
-func (s *Server) routes(rl *authmw.RateLimit) {
+func (s *Server) routes(rl *authmw.RateLimit, authRL *authmw.RateLimit) {
 	r := s.router
 	r.Use(chimw.RequestID)
 	r.Use(chimw.RealIP)
@@ -136,22 +137,33 @@ func (s *Server) routes(rl *authmw.RateLimit) {
 	// propre clé API échouerait pour la même raison, afin d'afficher une
 	// page de blocage plutôt qu'une erreur générique.
 	r.Get("/tenants/{tenantSlug}/status", s.handleGetTenantStatus)
-	r.Post("/auth/login", s.handleLogin) // personnel tenant — X-API-Key reste aussi valide sur les routes métier ci-dessous
-	r.Post("/admin/auth/login", s.handleAdminLogin)
 	r.Post("/webhooks/abmcy/{tenantSlug}", s.handleABMCYPaymentWebhook)
 	// Distinct from the tenant commerce webhook above: this one is signed
 	// with ABMCY's OWN merchant credentials (a tenant paying ITS
 	// subscription to ABMCY), never a tenant's own payment credentials.
 	r.Post("/webhooks/abmcy-subscription", s.handleSubscriptionWebhook)
 
-	// Authentification des clients finaux d'un tenant (ex: les acheteurs
-	// de HANI'S) — troisième public, distinct du personnel tenant
-	// (X-API-Key) et du super-admin ABMCY. Identifié par tenant_slug dans
-	// le corps de la requête puisqu'un client final n'a pas de clé API.
-	r.Post("/auth/customer/register", s.handleCustomerRegister)
-	r.Post("/auth/customer/login", s.handleCustomerLogin)
-	r.Post("/auth/customer/forgot-password", s.handleCustomerForgotPassword)
-	r.Post("/auth/customer/reset-password", s.handleCustomerResetPassword)
+	// Routes d'authentification publiques — pas encore de tenant résolu à
+	// ce stade, donc pas protégées par le rate limit "par tenant" plus
+	// bas. Sans limite dédiée ici, ces routes seraient brute-forçables à
+	// volonté (mot de passe staff/admin/client, spam de reset password).
+	// authRL dégrade sur l'IP appelante (voir RateLimit.Middleware).
+	r.Group(func(r chi.Router) {
+		if authRL != nil {
+			r.Use(authRL.Middleware)
+		}
+		r.Post("/auth/login", s.handleLogin) // personnel tenant — X-API-Key reste aussi valide sur les routes métier ci-dessous
+		r.Post("/admin/auth/login", s.handleAdminLogin)
+
+		// Authentification des clients finaux d'un tenant (ex: les acheteurs
+		// de HANI'S) — troisième public, distinct du personnel tenant
+		// (X-API-Key) et du super-admin ABMCY. Identifié par tenant_slug dans
+		// le corps de la requête puisqu'un client final n'a pas de clé API.
+		r.Post("/auth/customer/register", s.handleCustomerRegister)
+		r.Post("/auth/customer/login", s.handleCustomerLogin)
+		r.Post("/auth/customer/forgot-password", s.handleCustomerForgotPassword)
+		r.Post("/auth/customer/reset-password", s.handleCustomerResetPassword)
+	})
 
 	r.Group(func(r chi.Router) {
 		r.Use(s.customerAuth)
