@@ -6,6 +6,7 @@ import { FeaturesProvider } from "@/lib/features-context";
 import { ToastProvider } from "@/lib/toast-context";
 import { AuthGate } from "@/components/AuthGate";
 import { NavBar } from "@/components/NavBar";
+import { PageTransition } from "@/components/PageTransition";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -36,7 +37,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
                 <NavBar />
                 <AuthGate>
                   <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-8">
-                    {children}
+                    <PageTransition>{children}</PageTransition>
                   </main>
                 </AuthGate>
               </div>

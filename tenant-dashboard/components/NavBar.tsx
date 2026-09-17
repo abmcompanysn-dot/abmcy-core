@@ -107,13 +107,29 @@ export function NavBar() {
         </div>
       </aside>
 
-      {/* Mobile / tablette : header horizontal, nav défilable */}
+      {/* Mobile / tablette : header horizontal, nav défilable. Sur toute
+          page autre que l'accueil (le hub, voir MobileHome), le logo est
+          remplacé par un bouton retour vers "/" — la navigation mobile
+          part du hub, donc "retour" y ramène toujours directement plutôt
+          que de naviguer l'historique du navigateur. */}
       <header className="border-b border-slate-200 bg-white md:hidden">
         <div className="flex items-center justify-between px-4 py-3">
-          <span className="flex items-center gap-2 text-base font-semibold text-slate-900">
-            <img src="/logo.svg" alt="" width={24} height={24} />
-            ABMCY <span className="text-indigo-600">Dashboard</span>
-          </span>
+          {pathname !== "/" ? (
+            <Link
+              href="/"
+              className="flex items-center gap-1.5 text-sm font-medium text-slate-600"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-4 w-4">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+              </svg>
+              Accueil
+            </Link>
+          ) : (
+            <span className="flex items-center gap-2 text-base font-semibold text-slate-900">
+              <img src="/logo.svg" alt="" width={24} height={24} />
+              ABMCY <span className="text-indigo-600">Dashboard</span>
+            </span>
+          )}
           <button
             onClick={logout}
             className="rounded-md border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900"
