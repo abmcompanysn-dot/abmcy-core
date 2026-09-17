@@ -18,6 +18,7 @@ import { LoadingBlock } from "@/components/Spinner";
 import { TenantPaymentConfig } from "@/components/TenantPaymentConfig";
 import { ResetOwnerPasswordButton } from "@/components/ResetOwnerPasswordButton";
 import { ImpersonateTenantButton } from "@/components/ImpersonateTenantButton";
+import { TenantSubscriptionPanel } from "@/components/TenantSubscriptionPanel";
 
 const SOCIAL_TYPES = [
   "instagram",
@@ -459,6 +460,8 @@ export default function TenantProfilePage() {
           </div>
         )}
       </div>
+
+      {tenant && <TenantSubscriptionPanel tenantId={tenant.id} />}
 
       <form
         onSubmit={handleSocialsSubmit}

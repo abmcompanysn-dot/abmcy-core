@@ -164,8 +164,8 @@ export type ConfigKey =
   | "R2_PUBLIC_URL"
   | "RESEND_API_KEY"
   | "RESEND_FROM_ADDR"
-  | "CINETPAY_API_KEY"
-  | "CINETPAY_SITE_ID"
+  | "ABMCY_PAYMENT_APP_KEY"
+  | "ABMCY_PAYMENT_HMAC_SECRET"
   | "CORS_ORIGINS";
 
 export interface ConfigStatus {
@@ -395,6 +395,61 @@ export function updateTenantActive(
       method: "PUT",
       body: JSON.stringify({ is_active: isActive }),
     }
+  );
+}
+
+export interface Subscription {
+  price_fcfa: number | null;
+  status: "inactive" | "active" | "past_due" | "cancelled";
+  next_billing_at?: string;
+  past_due_since?: string;
+  cgu_accepted_at?: string;
+}
+
+export interface SubscriptionPayment {
+  id: string;
+  amount_fcfa: number;
+  status: "pending" | "paid" | "failed";
+  period_start: string;
+  period_end: string;
+  paid_at?: string;
+  created_at: string;
+}
+
+/** GET /admin/tenants/{tenantID}/subscription — état de facturation de l'abonnement d'un tenant. */
+export function getTenantSubscription(
+  adminKey: string,
+  tenantId: string
+): Promise<Subscription> {
+  return request<Subscription>(
+    `/admin/tenants/${encodeURIComponent(tenantId)}/subscription`,
+    adminKey,
+    { method: "GET" }
+  );
+}
+
+/** PUT /admin/tenants/{tenantID}/subscription/price — fixe le prix mensuel d'abonnement d'un tenant. */
+export function setTenantSubscriptionPrice(
+  adminKey: string,
+  tenantId: string,
+  priceFCFA: number
+): Promise<void> {
+  return request<void>(
+    `/admin/tenants/${encodeURIComponent(tenantId)}/subscription/price`,
+    adminKey,
+    { method: "PUT", body: JSON.stringify({ price_fcfa: priceFCFA }) }
+  );
+}
+
+/** GET /admin/tenants/{tenantID}/subscription/payments — historique de facturation d'un tenant. */
+export function listTenantSubscriptionPayments(
+  adminKey: string,
+  tenantId: string
+): Promise<SubscriptionPayment[]> {
+  return request<SubscriptionPayment[]>(
+    `/admin/tenants/${encodeURIComponent(tenantId)}/subscription/payments`,
+    adminKey,
+    { method: "GET" }
   );
 }
 

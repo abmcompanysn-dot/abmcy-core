@@ -657,6 +657,59 @@ func (s *Server) handleSendInvoiceEmail(w http.ResponseWriter, r *http.Request) 
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// handleSendContractEmail attaches the tenant's ABMCY Core subscription
+// contract (generated client-side, same pattern as
+// handleSendInvoiceEmail) and emails it to the tenant's own
+// contact_email — e.g. so the owner has a signed record for their own
+// files, or to send it to whoever handles their paperwork.
+func (s *Server) handleSendContractEmail(w http.ResponseWriter, r *http.Request) {
+	t, _ := authmw.TenantFromContext(r.Context())
+
+	var body struct {
+		PDFBase64 string `json:"pdf_base64"`
+		Filename  string `json:"filename"`
+	}
+	if err := decodeJSON(r, &body); err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+	if body.PDFBase64 == "" {
+		response.Err(w, apierror.New(422, "validation_error", "Le PDF du contrat est manquant."))
+		return
+	}
+
+	profile, err := s.tenants.Get(r.Context(), t.ID)
+	if err != nil {
+		response.Err(w, err)
+		return
+	}
+	if profile.ContactEmail == "" {
+		response.Err(w, apierror.New(422, "validation_error", "Aucun email de contact n'est renseigné pour ce compte."))
+		return
+	}
+
+	filename := body.Filename
+	if filename == "" {
+		filename = "contrat-abmcy-core.pdf"
+	}
+
+	html := emailtemplate.Render(emailtemplate.Data{
+		Heading: "Votre contrat ABMCY Core",
+		Paragraphs: []string{
+			"Bonjour,",
+			"Veuillez trouver ci-joint votre contrat d'abonnement ABMCY Core.",
+		},
+	})
+
+	if err := s.notifications.SendEmail(r.Context(), t.ID, profile.ContactEmail, "Contrat ABMCY Core", html, "contract",
+		notification.Attachment{Filename: filename, ContentBase64: body.PDFBase64},
+	); err != nil {
+		response.Err(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (s *Server) handleSendEmail(w http.ResponseWriter, r *http.Request) {
 	t, _ := authmw.TenantFromContext(r.Context())
 
@@ -1082,6 +1135,150 @@ func (s *Server) handleAdminImpersonateTenant(w http.ResponseWriter, r *http.Req
 		return
 	}
 	response.JSON(w, http.StatusOK, map[string]string{"token": token})
+}
+
+// --- Abonnement (facturation ABMCY -> tenant) ---------------------------
+
+// handleAdminGetSubscription shows an admin the billing state of one
+// tenant's ABMCY Core subscription (price, status, next due date).
+func (s *Server) handleAdminGetSubscription(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := parseUUID(chi.URLParam(r, "tenantID"))
+	if err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+	sub, err := s.subscriptions.Get(r.Context(), tenantID)
+	if err != nil {
+		response.Err(w, err)
+		return
+	}
+	response.JSON(w, http.StatusOK, sub)
+}
+
+// handleAdminSetSubscriptionPrice fixes (or changes) a tenant's monthly
+// subscription price — negotiated per client, not picked from a fixed
+// plan. See subscription.Service.SetPrice.
+func (s *Server) handleAdminSetSubscriptionPrice(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := parseUUID(chi.URLParam(r, "tenantID"))
+	if err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+	var body struct {
+		PriceFCFA int `json:"price_fcfa"`
+	}
+	if err := decodeJSON(r, &body); err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+	if err := s.subscriptions.SetPrice(r.Context(), tenantID, body.PriceFCFA); err != nil {
+		response.Err(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleAdminListSubscriptionPayments shows an admin one tenant's
+// subscription billing history.
+func (s *Server) handleAdminListSubscriptionPayments(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := parseUUID(chi.URLParam(r, "tenantID"))
+	if err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+	payments, err := s.subscriptions.ListPayments(r.Context(), tenantID)
+	if err != nil {
+		response.Err(w, err)
+		return
+	}
+	response.JSON(w, http.StatusOK, payments)
+}
+
+// handleGetSubscription lets a tenant's own dashboard read its billing
+// state — needed to show a past-due banner or a "pay now" button.
+func (s *Server) handleGetSubscription(w http.ResponseWriter, r *http.Request) {
+	t, _ := authmw.TenantFromContext(r.Context())
+	sub, err := s.subscriptions.Get(r.Context(), t.ID)
+	if err != nil {
+		response.Err(w, err)
+		return
+	}
+	response.JSON(w, http.StatusOK, sub)
+}
+
+// handleAcceptCGU records the tenant owner's acceptance of ABMCY Core's
+// terms of use. Reserved to staff JWT (requireStaffJWT would be
+// stricter, but here even an X-API-Key integration acting on the
+// tenant's behalf is fine — it's a fact about the tenant, not an
+// identified human's action).
+func (s *Server) handleAcceptCGU(w http.ResponseWriter, r *http.Request) {
+	t, _ := authmw.TenantFromContext(r.Context())
+	if err := s.subscriptions.AcceptCGU(r.Context(), t.ID); err != nil {
+		response.Err(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleCreateSubscriptionInvoice generates a payment link for the
+// tenant's next (or overdue) billing period, e.g. to pay ahead or catch
+// up after a past_due notice.
+func (s *Server) handleCreateSubscriptionInvoice(w http.ResponseWriter, r *http.Request) {
+	t, _ := authmw.TenantFromContext(r.Context())
+	callbackURL := s.publicBaseURL + "/webhooks/abmcy-subscription"
+	var body struct {
+		ReturnURL string `json:"return_url"`
+	}
+	_ = decodeJSON(r, &body) // return_url is optional — a missing/invalid body just omits it
+
+	payment, err := s.subscriptions.CreateInvoice(r.Context(), t.ID, callbackURL, body.ReturnURL)
+	if err != nil {
+		response.Err(w, err)
+		return
+	}
+	response.JSON(w, http.StatusOK, payment)
+}
+
+// handleListSubscriptionPayments lets a tenant see its own billing
+// history from its dashboard.
+func (s *Server) handleListSubscriptionPayments(w http.ResponseWriter, r *http.Request) {
+	t, _ := authmw.TenantFromContext(r.Context())
+	payments, err := s.subscriptions.ListPayments(r.Context(), t.ID)
+	if err != nil {
+		response.Err(w, err)
+		return
+	}
+	response.JSON(w, http.StatusOK, payments)
+}
+
+// handleSubscriptionWebhook is ABMCY Core Payment's callback for a
+// tenant's subscription invoice — signed with ABMCY's OWN merchant
+// credentials (see internal/subscription), never a tenant's. app_ref is
+// always prefixed "sub-" (see Service.CreateInvoice), which is enough to
+// route it here instead of internal/payment's tenant-commerce webhook.
+func (s *Server) handleSubscriptionWebhook(w http.ResponseWriter, r *http.Request) {
+	rawBody, err := io.ReadAll(r.Body)
+	if err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+	if !s.subscriptions.VerifyWebhookSignature(rawBody, r.Header.Get("X-Abmcy-Signature")) {
+		response.Err(w, apierror.New(401, "invalid_signature", "Signature du webhook invalide."))
+		return
+	}
+
+	var payload struct {
+		AppRef string `json:"app_ref"`
+	}
+	if err := json.Unmarshal(rawBody, &payload); err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+	if err := s.subscriptions.HandleWebhook(r.Context(), payload.AppRef); err != nil {
+		response.Err(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
 }
 
 // handleAdminUploadTenantLogo lets ABMCY staff upload a tenant's logo

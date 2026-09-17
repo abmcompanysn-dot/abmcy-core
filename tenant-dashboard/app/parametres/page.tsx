@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { API_URL, checkHealth } from "@/lib/api";
+import { SubscriptionSection } from "@/components/SubscriptionSection";
 
 type HealthState = "idle" | "checking" | "ok" | "down";
 
@@ -60,6 +61,8 @@ export default function SettingsPage() {
           )}
         </div>
       </div>
+
+      <SubscriptionSection />
 
       <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
         <h2 className="text-sm font-medium text-slate-700">Session</h2>

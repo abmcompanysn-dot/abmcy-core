@@ -650,6 +650,73 @@ export function getProfile(apiKey: string): Promise<TenantProfile> {
   return request<TenantProfile>("/profile", apiKey, { method: "GET" });
 }
 
+// --- Abonnement ABMCY Core -----------------------------------------------
+
+export interface Subscription {
+  price_fcfa: number | null;
+  status: "inactive" | "active" | "past_due" | "cancelled";
+  next_billing_at?: string;
+  past_due_since?: string;
+  cgu_accepted_at?: string;
+}
+
+export interface SubscriptionPayment {
+  id: string;
+  amount_fcfa: number;
+  status: "pending" | "paid" | "failed";
+  period_start: string;
+  period_end: string;
+  payment_url?: string;
+  paid_at?: string;
+  created_at: string;
+}
+
+/** GET /subscription — état de facturation de l'abonnement ABMCY Core du
+ * tenant connecté (prix, statut, prochaine échéance). */
+export function getSubscription(apiKey: string): Promise<Subscription> {
+  return request<Subscription>("/subscription", apiKey, { method: "GET" });
+}
+
+/** POST /subscription/accept-cgu — enregistre l'acceptation des CGU par
+ * le owner du tenant (horodatée côté serveur). */
+export function acceptCGU(apiKey: string): Promise<void> {
+  return request<void>("/subscription/accept-cgu", apiKey, { method: "POST" });
+}
+
+/** POST /subscription/invoice — génère un lien de paiement ABMCY Core
+ * Payment pour la prochaine échéance (ou pour régulariser un impayé). */
+export function createSubscriptionInvoice(
+  apiKey: string,
+  returnUrl?: string
+): Promise<SubscriptionPayment> {
+  return request<SubscriptionPayment>("/subscription/invoice", apiKey, {
+    method: "POST",
+    body: JSON.stringify({ return_url: returnUrl }),
+  });
+}
+
+/** GET /subscription/payments — historique des échéances d'abonnement du tenant. */
+export function listSubscriptionPayments(
+  apiKey: string
+): Promise<SubscriptionPayment[]> {
+  return request<SubscriptionPayment[]>("/subscription/payments", apiKey, {
+    method: "GET",
+  });
+}
+
+/** POST /subscription/contract-email — envoie le contrat (PDF généré
+ * côté navigateur) à l'email de contact du tenant, en pièce jointe. */
+export function sendContractEmail(
+  apiKey: string,
+  pdfBase64: string,
+  filename: string
+): Promise<void> {
+  return request<void>("/subscription/contract-email", apiKey, {
+    method: "POST",
+    body: JSON.stringify({ pdf_base64: pdfBase64, filename }),
+  });
+}
+
 // --- Trafic -------------------------------------------------------------
 
 export type TrafficSummary = {

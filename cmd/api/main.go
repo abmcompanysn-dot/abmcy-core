@@ -34,6 +34,7 @@ import (
 	"github.com/abmcy/core/internal/payment"
 	"github.com/abmcy/core/internal/platformconfig"
 	"github.com/abmcy/core/internal/storage"
+	"github.com/abmcy/core/internal/subscription"
 	"github.com/abmcy/core/internal/tenant"
 	"github.com/abmcy/core/internal/tenantpayment"
 	"github.com/abmcy/core/internal/traffic"
@@ -88,6 +89,7 @@ func main() {
 	notifications := notification.NewService(pool, platformCfg)
 	trafficSvc := traffic.NewService(pool)
 	featuresSvc := features.NewService(pool)
+	subscriptions := subscription.NewService(pool, platformCfg, "https://core.diarra.app")
 
 	// Catalogue optionnel (activé par tenant via internal/features) :
 	// produits, tissus, clients, mesures, panier, galerie, avis.
@@ -105,6 +107,26 @@ func main() {
 
 	rateLimiter := authmw.NewRateLimit(5, 20) // repli par défaut si un tenant n'a pas ses propres limites
 
+	// Résiliation automatique des tenants en impayé prolongé (voir
+	// subscription.gracePeriod) — vérifié une fois par jour, suffisant
+	// pour une fenêtre de grâce mesurée en jours plutôt qu'en minutes.
+	go func() {
+		ticker := time.NewTicker(24 * time.Hour)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if n, err := subscriptions.Enforce(ctx); err != nil {
+					slog.Error("subscription: enforce failed", "error", err)
+				} else if n > 0 {
+					slog.Info("subscription: tenants suspended for non-payment", "count", n)
+				}
+			}
+		}
+	}()
+
 	srv := httpserver.New(httpserver.Deps{
 		Pool:          pool,
 		Tenants:       tenants,
@@ -117,6 +139,7 @@ func main() {
 		Config:        platformCfg,
 		Traffic:       trafficSvc,
 		Features:      featuresSvc,
+		Subscriptions: subscriptions,
 		Products:      products,
 		Fabrics:       fabrics,
 		Customers:     customers,

@@ -32,10 +32,13 @@ const (
 	KeyR2PublicURL       Key = "R2_PUBLIC_URL"
 	KeyResendAPIKey      Key = "RESEND_API_KEY"
 	KeyResendFromAddr    Key = "RESEND_FROM_ADDR"
-	// Payments are no longer configured here: each tenant has its own
-	// ABMCY Core Payment credentials, stored per-tenant and encrypted in
-	// tenant_payment_config — see internal/tenantpayment.
-	//
+	// A tenant's own commerce payments (its customers paying for orders)
+	// use per-tenant credentials in tenant_payment_config — see
+	// internal/tenantpayment. These two keys are different: they're
+	// ABMCY's OWN ABMCY Core Payment merchant account, used to bill
+	// tenants for their ABMCY Core subscription — see internal/subscription.
+	KeyABMCYPaymentAppKey     Key = "ABMCY_PAYMENT_APP_KEY"
+	KeyABMCYPaymentHMACSecret Key = "ABMCY_PAYMENT_HMAC_SECRET"
 	// KeyCorsOrigins holds the comma-separated list of origins allowed to
 	// call the API from a browser (see httpserver.corsMiddleware) — each
 	// tenant's own storefront (e.g. https://hani.abmcy.com) needs to be
@@ -50,6 +53,7 @@ const (
 var AllKeys = []Key{
 	KeyR2AccountID, KeyR2AccessKeyID, KeyR2SecretAccessKey, KeyR2Bucket, KeyR2PublicURL,
 	KeyResendAPIKey, KeyResendFromAddr,
+	KeyABMCYPaymentAppKey, KeyABMCYPaymentHMACSecret,
 	KeyCorsOrigins,
 }
 
@@ -58,9 +62,11 @@ var AllKeys = []Key{
 // (bucket name, public URL, from-address) are fine to show back for
 // editing.
 var secretKeys = map[Key]bool{
-	KeyR2AccessKeyID:     true,
-	KeyR2SecretAccessKey: true,
-	KeyResendAPIKey:      true,
+	KeyR2AccessKeyID:          true,
+	KeyR2SecretAccessKey:      true,
+	KeyResendAPIKey:           true,
+	KeyABMCYPaymentAppKey:     true,
+	KeyABMCYPaymentHMACSecret: true,
 }
 
 func IsSecret(k Key) bool { return secretKeys[k] }

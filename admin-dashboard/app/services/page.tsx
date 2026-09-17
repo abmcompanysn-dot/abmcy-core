@@ -33,11 +33,12 @@ const SERVICE_GROUPS: ServiceGroup[] = [
     ],
   },
   {
-    title: "CinetPay",
-    description: "Paiements en ligne.",
+    title: "ABMCY Core Payment — abonnements",
+    description:
+      "Compte marchand ABMCY Core Payment de la plateforme elle-même, utilisé pour facturer l'abonnement mensuel de chaque tenant. Distinct des clés propres à chaque tenant (page profil du tenant), qui servent à encaisser SES clients.",
     keys: [
-      { key: "CINETPAY_API_KEY", label: "API Key", secret: true },
-      { key: "CINETPAY_SITE_ID", label: "Site ID", secret: false },
+      { key: "ABMCY_PAYMENT_APP_KEY", label: "App Key", secret: true },
+      { key: "ABMCY_PAYMENT_HMAC_SECRET", label: "HMAC Secret", secret: true },
     ],
   },
   {

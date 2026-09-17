@@ -16,6 +16,7 @@ import (
 	"github.com/abmcy/core/internal/payment"
 	"github.com/abmcy/core/internal/platformconfig"
 	"github.com/abmcy/core/internal/storage"
+	"github.com/abmcy/core/internal/subscription"
 	"github.com/abmcy/core/internal/tenant"
 	"github.com/abmcy/core/internal/tenantpayment"
 	"github.com/abmcy/core/internal/traffic"
@@ -40,6 +41,7 @@ type Server struct {
 	config        *platformconfig.Service
 	traffic       *traffic.Service
 	features      *features.Service
+	subscriptions *subscription.Service
 
 	products     *catalog.ProductService
 	fabrics      *catalog.FabricService
@@ -72,6 +74,7 @@ type Deps struct {
 	Config        *platformconfig.Service
 	Traffic       *traffic.Service
 	Features      *features.Service
+	Subscriptions *subscription.Service
 	Products      *catalog.ProductService
 	Fabrics       *catalog.FabricService
 	Customers     *catalog.CustomerService
@@ -100,6 +103,7 @@ func New(d Deps) *Server {
 		config:        d.Config,
 		traffic:       d.Traffic,
 		features:      d.Features,
+		subscriptions: d.Subscriptions,
 		products:      d.Products,
 		fabrics:       d.Fabrics,
 		customers:     d.Customers,
@@ -135,6 +139,10 @@ func (s *Server) routes(rl *authmw.RateLimit) {
 	r.Post("/auth/login", s.handleLogin) // personnel tenant — X-API-Key reste aussi valide sur les routes métier ci-dessous
 	r.Post("/admin/auth/login", s.handleAdminLogin)
 	r.Post("/webhooks/abmcy/{tenantSlug}", s.handleABMCYPaymentWebhook)
+	// Distinct from the tenant commerce webhook above: this one is signed
+	// with ABMCY's OWN merchant credentials (a tenant paying ITS
+	// subscription to ABMCY), never a tenant's own payment credentials.
+	r.Post("/webhooks/abmcy-subscription", s.handleSubscriptionWebhook)
 
 	// Authentification des clients finaux d'un tenant (ex: les acheteurs
 	// de HANI'S) — troisième public, distinct du personnel tenant
@@ -167,6 +175,10 @@ func (s *Server) routes(rl *authmw.RateLimit) {
 
 		r.Get("/features", s.handleGetFeatures)
 		r.Get("/profile", s.handleGetProfile)
+		r.Get("/subscription", s.handleGetSubscription)
+		r.Post("/subscription/accept-cgu", s.handleAcceptCGU)
+		r.Post("/subscription/invoice", s.handleCreateSubscriptionInvoice)
+		r.Get("/subscription/payments", s.handleListSubscriptionPayments)
 
 		r.Get("/traffic", s.handleTrafficSummary)
 		r.Get("/traffic/top-routes", s.handleTrafficTopRoutes)
@@ -220,6 +232,7 @@ func (s *Server) routes(rl *authmw.RateLimit) {
 		r.Patch("/orders/{orderID}/status", s.handleUpdateOrderStatus)
 		r.Get("/orders/{orderID}/history", s.handleOrderHistory)
 		r.Post("/orders/{orderID}/invoice-email", s.handleSendInvoiceEmail)
+		r.Post("/subscription/contract-email", s.handleSendContractEmail)
 		r.Post("/custom-orders", s.handleCreateCustomOrder)
 		r.Post("/measurements", s.handleSaveMeasurements)
 		r.Post("/uploads/image", s.handleUploadImage)
@@ -331,6 +344,9 @@ func (s *Server) routes(rl *authmw.RateLimit) {
 		r.Get("/admin/tenants/{tenantID}/payment-config", s.handleAdminGetPaymentConfig)
 		r.Put("/admin/tenants/{tenantID}/payment-config", s.handleAdminSetPaymentConfig)
 		r.Delete("/admin/tenants/{tenantID}/payment-config", s.handleAdminDeletePaymentConfig)
+		r.Get("/admin/tenants/{tenantID}/subscription", s.handleAdminGetSubscription)
+		r.Put("/admin/tenants/{tenantID}/subscription/price", s.handleAdminSetSubscriptionPrice)
+		r.Get("/admin/tenants/{tenantID}/subscription/payments", s.handleAdminListSubscriptionPayments)
 
 		r.Get("/admin/config", s.handleAdminGetConfig)
 		r.Put("/admin/config/{key}", s.handleAdminSetConfig)

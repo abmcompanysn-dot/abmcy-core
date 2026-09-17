@@ -5,6 +5,7 @@ import { AuthProvider } from "@/lib/auth-context";
 import { FeaturesProvider } from "@/lib/features-context";
 import { ToastProvider } from "@/lib/toast-context";
 import { AuthGate } from "@/components/AuthGate";
+import { CGUGate } from "@/components/CGUGate";
 import { NavBar } from "@/components/NavBar";
 import { PageTransition } from "@/components/PageTransition";
 
@@ -36,9 +37,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
               <div className="flex min-h-full flex-col md:flex-row">
                 <NavBar />
                 <AuthGate>
-                  <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-8">
-                    <PageTransition>{children}</PageTransition>
-                  </main>
+                  <CGUGate>
+                    <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-8">
+                      <PageTransition>{children}</PageTransition>
+                    </main>
+                  </CGUGate>
                 </AuthGate>
               </div>
             </FeaturesProvider>
