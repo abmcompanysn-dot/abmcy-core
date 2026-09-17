@@ -239,7 +239,8 @@ export default function OrderDetailPage({
                   <h2 className="mb-4 text-sm font-medium text-slate-700">
                     Articles
                   </h2>
-                  <table className="w-full text-sm">
+                  {/* Desktop : tableau classique */}
+                  <table className="hidden w-full text-sm sm:table">
                     <thead>
                       <tr className="border-b border-slate-100 text-xs uppercase tracking-wide text-slate-500">
                         <th className="pb-2 text-left font-medium">Produit</th>
@@ -267,6 +268,25 @@ export default function OrderDetailPage({
                       ))}
                     </tbody>
                   </table>
+
+                  {/* Mobile : liste compacte, une ligne par article */}
+                  <div className="divide-y divide-slate-100 sm:hidden">
+                    {order.items.map((item) => (
+                      <div key={item.product_id} className="flex items-center justify-between gap-3 py-2.5">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm text-slate-900">
+                            {item.product_name}
+                          </p>
+                          <p className="text-xs text-slate-500">
+                            {formatFCFA(item.unit_price)} × {item.quantity}
+                          </p>
+                        </div>
+                        <span className="shrink-0 text-sm font-medium text-slate-900">
+                          {formatFCFA(item.unit_price * item.quantity)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                 </section>
               )}
 

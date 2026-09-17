@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { ApiError, listCustomers, type Customer } from "@/lib/api";
 import { CustomerTable } from "@/components/CustomerTable";
+import { CustomerCardList } from "@/components/CustomerCardList";
 import { LoadingBlock } from "@/components/Spinner";
 
 /**
@@ -88,7 +89,14 @@ function ClientsPageContent() {
       {loading && customers === null ? (
         <LoadingBlock label="Chargement des clients..." />
       ) : (
-        <CustomerTable customers={customers ?? []} onUpdated={handleUpdated} />
+        <>
+          <div className="hidden md:block">
+            <CustomerTable customers={customers ?? []} onUpdated={handleUpdated} />
+          </div>
+          <div className="md:hidden">
+            <CustomerCardList customers={customers ?? []} onUpdated={handleUpdated} />
+          </div>
+        </>
       )}
     </div>
   );

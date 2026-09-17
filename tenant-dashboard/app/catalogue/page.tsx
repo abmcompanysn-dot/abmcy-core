@@ -7,6 +7,7 @@ import { ApiError, listProducts, type Product } from "@/lib/api";
 import { CatalogGate } from "@/components/CatalogGate";
 import { NewProductForm } from "@/components/NewProductForm";
 import { ProductsTable } from "@/components/ProductsTable";
+import { ProductsCardList } from "@/components/ProductsCardList";
 import { LoadingBlock } from "@/components/Spinner";
 
 function CataloguePageContent() {
@@ -89,7 +90,14 @@ function CataloguePageContent() {
       {loading && products === null ? (
         <LoadingBlock label="Chargement des produits..." />
       ) : (
-        <ProductsTable products={products ?? []} onUpdated={handleUpdated} />
+        <>
+          <div className="hidden md:block">
+            <ProductsTable products={products ?? []} onUpdated={handleUpdated} />
+          </div>
+          <div className="md:hidden">
+            <ProductsCardList products={products ?? []} onUpdated={handleUpdated} />
+          </div>
+        </>
       )}
     </div>
   );

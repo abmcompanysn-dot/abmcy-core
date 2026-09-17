@@ -5,6 +5,7 @@ import { useAuth } from "@/lib/auth-context";
 import { ApiError, decodeStaffRole, listStaff, type StaffUser } from "@/lib/api";
 import { NewStaffForm } from "@/components/NewStaffForm";
 import { StaffTable } from "@/components/StaffTable";
+import { StaffCardList } from "@/components/StaffCardList";
 import { LoadingBlock } from "@/components/Spinner";
 
 /**
@@ -103,11 +104,22 @@ function EquipePageContent() {
       {loading && staff === null ? (
         <LoadingBlock label="Chargement de l'équipe..." />
       ) : (
-        <StaffTable
-          staff={staff ?? []}
-          canManage={canManage}
-          onUpdated={handleUpdated}
-        />
+        <>
+          <div className="hidden md:block">
+            <StaffTable
+              staff={staff ?? []}
+              canManage={canManage}
+              onUpdated={handleUpdated}
+            />
+          </div>
+          <div className="md:hidden">
+            <StaffCardList
+              staff={staff ?? []}
+              canManage={canManage}
+              onUpdated={handleUpdated}
+            />
+          </div>
+        </>
       )}
     </div>
   );

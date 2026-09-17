@@ -196,7 +196,7 @@ export function MobileHome() {
 
         {/* Grille d'accès rapide */}
         <div className="grid grid-cols-4 gap-3">
-          <QuickLink href="/" label="Commandes" icon={Layers} color={brandColor} />
+          <QuickLink href="/commandes" label="Commandes" icon={Layers} color={brandColor} />
           {enabledQuickLinks.map((l) => (
             <QuickLink key={l.href} href={l.href} label={l.label} icon={l.icon} color={brandColor} />
           ))}
@@ -215,7 +215,7 @@ export function MobileHome() {
               Activité récente
             </h2>
             <Link
-              href="/"
+              href="/commandes"
               className="text-xs font-medium hover:underline"
               style={{ color: brandColor }}
             >
