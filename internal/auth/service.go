@@ -184,3 +184,33 @@ func (s *Service) SetStaffUserActive(ctx context.Context, tenantID, userID uuid.
 		return nil
 	})
 }
+
+// SetTenantOwnerPassword lets the ABMCY super-admin dashboard reset a
+// tenant's owner account password — e.g. the owner is locked out and has
+// no working email to receive a self-service reset link. Uses
+// WithSystem rather than WithTenant: an admin operator isn't scoped to
+// any one tenant's RLS context, and Create's guarantee (every tenant has
+// exactly one owner, made at tenant creation) means "the owner" is
+// unambiguous without needing a userID from the caller.
+func (s *Service) SetTenantOwnerPassword(ctx context.Context, tenantID uuid.UUID, newPassword string) error {
+	if len(newPassword) < 8 {
+		return apierror.New(422, "validation_error", "Le mot de passe doit contenir au moins 8 caractères.")
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return apierror.ErrInternal
+	}
+	return s.pool.WithSystem(ctx, func(ctx context.Context, tx db.TxLike) error {
+		tag, err := tx.Exec(ctx, `
+			UPDATE users SET password_hash = $1
+			WHERE tenant_id = $2 AND role = 'owner'
+		`, string(hash), tenantID)
+		if err != nil {
+			return err
+		}
+		if tag.RowsAffected() == 0 {
+			return apierror.New(404, "not_found", "Ce tenant n'a pas de compte owner.")
+		}
+		return nil
+	})
+}

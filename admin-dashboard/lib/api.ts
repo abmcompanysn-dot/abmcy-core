@@ -394,6 +394,26 @@ export function updateTenantActive(
 }
 
 /**
+ * PUT /admin/tenants/{tenantID}/owner-password — réinitialise le mot de
+ * passe du compte owner d'un tenant (ex : owner bloqué sans email
+ * fonctionnel pour une réinitialisation self-service).
+ */
+export function setTenantOwnerPassword(
+  adminKey: string,
+  tenantId: string,
+  newPassword: string
+): Promise<void> {
+  return request<void>(
+    `/admin/tenants/${encodeURIComponent(tenantId)}/owner-password`,
+    adminKey,
+    {
+      method: "PUT",
+      body: JSON.stringify({ new_password: newPassword }),
+    }
+  );
+}
+
+/**
  * POST /admin/tenants/{tenantID}/logo — upload un fichier logo pour un
  * tenant depuis le dashboard admin (sans avoir besoin de la clé API de ce
  * tenant). Ne modifie pas le profil : la réponse renvoie juste l'URL, à

@@ -1039,6 +1039,32 @@ func (s *Server) handleAdminSetTenantActive(w http.ResponseWriter, r *http.Reque
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// handleAdminSetTenantOwnerPassword lets the ABMCY super-admin dashboard
+// reset a tenant's owner account password (e.g. the owner is locked out
+// and has no working email for a self-service reset). See
+// auth.Service.SetTenantOwnerPassword.
+func (s *Server) handleAdminSetTenantOwnerPassword(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := parseUUID(chi.URLParam(r, "tenantID"))
+	if err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+
+	var body struct {
+		NewPassword string `json:"new_password"`
+	}
+	if err := decodeJSON(r, &body); err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+
+	if err := s.authSvc.SetTenantOwnerPassword(r.Context(), tenantID, body.NewPassword); err != nil {
+		response.Err(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // handleAdminUploadTenantLogo lets ABMCY staff upload a tenant's logo
 // directly from the admin dashboard, without needing that tenant's own
 // X-API-Key. It reuses storage.Service.UploadProductImage — which already

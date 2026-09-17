@@ -16,6 +16,7 @@ import {
 } from "@/lib/api";
 import { LoadingBlock } from "@/components/Spinner";
 import { TenantPaymentConfig } from "@/components/TenantPaymentConfig";
+import { ResetOwnerPasswordButton } from "@/components/ResetOwnerPasswordButton";
 
 const SOCIAL_TYPES = [
   "instagram",
@@ -441,6 +442,18 @@ export default function TenantProfilePage() {
           {savingProfile ? "Enregistrement..." : "Enregistrer le profil"}
         </button>
       </form>
+
+      <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-5">
+        <h2 className="text-base font-semibold text-slate-900">Sécurité</h2>
+        <p className="text-sm text-slate-500">
+          Réinitialise le mot de passe du compte owner de ce tenant — utile
+          si le owner est bloqué et n&apos;a pas d&apos;email fonctionnel
+          pour une réinitialisation self-service.
+        </p>
+        {tenant && (
+          <ResetOwnerPasswordButton tenantId={tenant.id} tenantName={tenant.name} />
+        )}
+      </div>
 
       <form
         onSubmit={handleSocialsSubmit}
