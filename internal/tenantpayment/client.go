@@ -31,10 +31,17 @@ type Client struct {
 
 func NewClient(baseURL, appKey, hmacSecret string) *Client {
 	sum := sha256.Sum256([]byte(hmacSecret))
+	// The HMAC key is the HEX-ENCODED TEXT of SHA256(hmac_secret) — not
+	// its raw 32 bytes. Confirmed against ABMCY Core Payment's own
+	// reference implementations (Node/PHP/curl all do
+	// hash('sha256', secret) as a hex string, then HMAC with THAT string
+	// as the key) and verified live against core.diarra.app: raw bytes
+	// get invalid_signature every time, the hex string succeeds.
+	hexKey := hex.EncodeToString(sum[:])
 	return &Client{
 		baseURL:    baseURL,
 		appKey:     appKey,
-		hmacKey:    sum[:],
+		hmacKey:    []byte(hexKey),
 		httpClient: &http.Client{Timeout: 25 * time.Second},
 	}
 }
@@ -47,10 +54,12 @@ func (c *Client) sign(ts, body string) string {
 }
 
 // VerifyWebhookSignature checks a callback: HMAC_SHA256(SHA256(secret),
-// raw_body) must equal the X-Abmcy-Signature header (hex).
+// raw_body) must equal the X-Abmcy-Signature header (hex). The HMAC key
+// is the hex-encoded TEXT of SHA256(secret) — see NewClient for why.
 func VerifyWebhookSignature(hmacSecret string, rawBody []byte, signatureHex string) bool {
 	sum := sha256.Sum256([]byte(hmacSecret))
-	mac := hmac.New(sha256.New, sum[:])
+	hexKey := hex.EncodeToString(sum[:])
+	mac := hmac.New(sha256.New, []byte(hexKey))
 	mac.Write(rawBody)
 	expected := mac.Sum(nil)
 	got, err := hex.DecodeString(signatureHex)
