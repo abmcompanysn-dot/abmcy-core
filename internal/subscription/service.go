@@ -9,6 +9,7 @@ package subscription
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/abmcy/core/internal/db"
@@ -176,7 +177,10 @@ func (s *Service) CreateInvoice(ctx context.Context, tenantID uuid.UUID, callbac
 		// tenant's own credentials pasted in by mistake instead of ABMCY's
 		// own merchant account) surfaces here as an auth failure from ABMCY
 		// Core Payment itself — worth a clear 502 rather than a generic 500,
-		// since it's an operator misconfiguration, not a server bug.
+		// since it's an operator misconfiguration, not a server bug. Logged
+		// here (response.Err never logs an *apierror.Error) so the real
+		// upstream reason stays visible to operators.
+		slog.Error("subscription: ABMCY Core Payment rejected invoice request", "error", err)
 		return nil, apierror.New(502, "billing_provider_error",
 			"ABMCY Core Payment a refusé la demande de paiement — vérifiez les clés de facturation plateforme (Services) depuis le dashboard admin.")
 	}
