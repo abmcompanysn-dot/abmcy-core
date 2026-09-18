@@ -158,7 +158,7 @@ func (s *Service) RequestPayout(ctx context.Context, tenantID uuid.UUID, amountC
 
 // ListPayouts returns a tenant's payout history, most recent first.
 func (s *Service) ListPayouts(ctx context.Context, tenantID uuid.UUID) ([]Payout, error) {
-	var payouts []Payout
+	payouts := []Payout{} // jamais nil : pas d'historique doit renvoyer [], pas null en JSON
 	err := s.pool.WithTenant(ctx, tenantID, func(ctx context.Context, tx db.TxLike) error {
 		rows, err := tx.Query(ctx, `
 			SELECT id, app_ref, amount_cfa, recipient_phone, recipient_operator, status, coalesce(failure_reason, ''), created_at

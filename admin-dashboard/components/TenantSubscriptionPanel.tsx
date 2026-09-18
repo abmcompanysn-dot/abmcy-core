@@ -56,7 +56,7 @@ export function TenantSubscriptionPanel({ tenantId }: { tenantId: string }) {
       .then(([sub, pays]) => {
         if (cancelled) return;
         setSubscription(sub);
-        setPayments(pays);
+        setPayments(pays ?? []);
         setPriceInput(sub.price_fcfa != null ? String(sub.price_fcfa) : "");
       })
       .catch(() => {

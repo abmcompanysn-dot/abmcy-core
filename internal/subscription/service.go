@@ -193,7 +193,7 @@ func (s *Service) CreateInvoice(ctx context.Context, tenantID uuid.UUID, callbac
 // ListPayments returns a tenant's subscription billing history, most
 // recent first.
 func (s *Service) ListPayments(ctx context.Context, tenantID uuid.UUID) ([]Payment, error) {
-	var payments []Payment
+	payments := []Payment{} // jamais nil : un tenant sans historique doit renvoyer [], pas null en JSON
 	err := s.pool.WithSystem(ctx, func(ctx context.Context, tx db.TxLike) error {
 		rows, err := tx.Query(ctx, `
 			SELECT id, amount_fcfa, status, period_start, period_end, coalesce(payment_url, ''), paid_at, created_at
