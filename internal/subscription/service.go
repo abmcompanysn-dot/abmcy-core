@@ -172,7 +172,13 @@ func (s *Service) CreateInvoice(ctx context.Context, tenantID uuid.UUID, callbac
 		ReturnURL:   returnURL,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("subscription: create invoice: %w", err)
+		// A wrong/misconfigured ABMCY_PAYMENT_APP_KEY or HMAC_SECRET (e.g. a
+		// tenant's own credentials pasted in by mistake instead of ABMCY's
+		// own merchant account) surfaces here as an auth failure from ABMCY
+		// Core Payment itself — worth a clear 502 rather than a generic 500,
+		// since it's an operator misconfiguration, not a server bug.
+		return nil, apierror.New(502, "billing_provider_error",
+			"ABMCY Core Payment a refusé la demande de paiement — vérifiez les clés de facturation plateforme (Services) depuis le dashboard admin.")
 	}
 
 	var p Payment
