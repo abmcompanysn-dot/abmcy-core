@@ -73,6 +73,7 @@ func (s *Server) handleCreateOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.sendOrderConfirmationEmail(r.Context(), t.ID, o)
+	s.sendOrderNotificationToTenant(r.Context(), t.ID, o)
 	response.JSON(w, http.StatusCreated, o)
 }
 
@@ -94,6 +95,29 @@ func (s *Server) sendOrderConfirmationEmail(ctx context.Context, tenantID uuid.U
 	})
 	if err := s.notifications.SendEmail(ctx, tenantID, o.CustomerEmail, "Confirmation de votre commande "+o.OrderNumber, body, "order_confirmation"); err != nil {
 		slog.Error("order confirmation email failed to send", "tenant_id", tenantID, "order_id", o.ID, "error", err)
+	}
+}
+
+// sendOrderNotificationToTenant alerts the tenant itself that a new order
+// came in — symmetric to sendOrderConfirmationEmail, but to the merchant
+// rather than the end customer. Also best-effort: a missing
+// contact_email, unconfigured Resend, or exhausted quota must never fail
+// order creation, which is already safely persisted at this point.
+func (s *Server) sendOrderNotificationToTenant(ctx context.Context, tenantID uuid.UUID, o *order.Order) {
+	profile, err := s.tenants.Get(ctx, tenantID)
+	if err != nil || profile.ContactEmail == "" {
+		return
+	}
+	body := emailtemplate.Render(emailtemplate.Data{
+		Heading: "Nouvelle commande reçue",
+		Paragraphs: []string{
+			fmt.Sprintf("Vous avez reçu une nouvelle commande %s de %s (%s), pour un montant de %d FCFA.",
+				o.OrderNumber, o.CustomerName, o.CustomerPhone, o.TotalAmount),
+			"Connectez-vous à votre dashboard pour la traiter.",
+		},
+	})
+	if err := s.notifications.SendEmail(ctx, tenantID, profile.ContactEmail, "Nouvelle commande — "+o.OrderNumber, body, "order_notification"); err != nil {
+		slog.Error("order notification email to tenant failed to send", "tenant_id", tenantID, "order_id", o.ID, "error", err)
 	}
 }
 
@@ -258,6 +282,7 @@ func (s *Server) handleCreateCustomOrder(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	s.sendOrderConfirmationEmail(r.Context(), t.ID, o)
+	s.sendOrderNotificationToTenant(r.Context(), t.ID, o)
 	response.JSON(w, http.StatusCreated, o)
 }
 
