@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"net"
 	"net/http"
 	"sync"
 
@@ -55,9 +56,24 @@ func (r *RateLimit) limiterFor(key string, rps, burst int) *rate.Limiter {
 	return tl.limiter
 }
 
+// hostOnly strips the ephemeral source port from a "host:port" address —
+// req.RemoteAddr (and RealIP-rewritten values that still carry a port)
+// gets a fresh port on every new TCP connection, so using it as-is for
+// the rate limit key meant almost every request landed in its own
+// brand-new limiter and the limit never actually triggered. Falls back
+// to the raw string if it doesn't parse as host:port (e.g. RealIP already
+// stripped it down to a bare IP).
+func hostOnly(hostport string) string {
+	host, _, err := net.SplitHostPort(hostport)
+	if err != nil {
+		return hostport
+	}
+	return host
+}
+
 func (r *RateLimit) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		key := req.RemoteAddr
+		key := hostOnly(req.RemoteAddr)
 		rps, burst := int(r.defaultRPS), r.defaultBurst
 
 		if t, ok := TenantFromContext(req.Context()); ok {

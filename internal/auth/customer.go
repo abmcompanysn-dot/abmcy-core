@@ -20,7 +20,10 @@ import (
 // Claims (tenant staff) and AdminClaims (ABMCY super-admin). A customer
 // JWT is scoped to exactly one tenant and must never grant access to
 // tenant-management or admin routes.
+const tokenTypeCustomer = "customer"
+
 type CustomerClaims struct {
+	Type       string    `json:"typ"`
 	CustomerID uuid.UUID `json:"customer_id"`
 	TenantID   uuid.UUID `json:"tenant_id"`
 	jwt.RegisteredClaims
@@ -91,6 +94,7 @@ func (s *Service) LoginCustomer(ctx context.Context, tenantID uuid.UUID, phone, 
 
 func (s *Service) signCustomerToken(tenantID, customerID uuid.UUID) (string, error) {
 	claims := CustomerClaims{
+		Type:       tokenTypeCustomer,
 		CustomerID: customerID,
 		TenantID:   tenantID,
 		RegisteredClaims: jwt.RegisteredClaims{
@@ -115,7 +119,7 @@ func (s *Service) ParseCustomerToken(ctx context.Context, tokenStr string) (*Cus
 	token, err := jwt.ParseWithClaims(tokenStr, claims, func(t *jwt.Token) (interface{}, error) {
 		return s.jwtSecret, nil
 	})
-	if err != nil || !token.Valid || claims.ID == "" {
+	if err != nil || !token.Valid || claims.ID == "" || claims.Type != tokenTypeCustomer {
 		return nil, apierror.ErrUnauthorized
 	}
 

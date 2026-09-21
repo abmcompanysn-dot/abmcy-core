@@ -21,7 +21,23 @@ func NewService(pool *db.Pool, jwtSecret string) *Service {
 	return &Service{pool: pool, jwtSecret: []byte(jwtSecret)}
 }
 
+// tokenType is a signed discriminant carried by every JWT this service
+// issues (Claims, CustomerClaims, AdminClaims) — without it, a JWT
+// customer login (POST /auth/customer/login) and a JWT staff login
+// (POST /auth/login) are structurally indistinguishable to a parser that
+// only checks the signature: they share the same jwtSecret, and Go's
+// JSON decoder silently zero-fills whichever of {user_id, role} /
+// {customer_id} the other type's payload doesn't have. A customer token
+// decoded as Claims ends up with Role == "" and UserID == uuid.Nil
+// instead of an error — exactly the shape staffAuth let through before
+// this field existed, since almost no handler checks StaffRole. Each
+// ParseXxxToken below now rejects a token whose Type doesn't match what
+// that parser expects, closing the confusion at the source instead of
+// relying on every handler to re-check a role.
+const tokenTypeStaff = "staff"
+
 type Claims struct {
+	Type     string    `json:"typ"`
 	UserID   uuid.UUID `json:"user_id"`
 	TenantID uuid.UUID `json:"tenant_id"`
 	Role     string    `json:"role"`
@@ -48,6 +64,7 @@ func (s *Service) Login(ctx context.Context, tenantID uuid.UUID, email, password
 	}
 
 	claims := Claims{
+		Type:     tokenTypeStaff,
 		UserID:   userID,
 		TenantID: tenantID,
 		Role:     role,
@@ -73,7 +90,7 @@ func (s *Service) ParseToken(ctx context.Context, tokenStr string) (*Claims, err
 	token, err := jwt.ParseWithClaims(tokenStr, claims, func(t *jwt.Token) (interface{}, error) {
 		return s.jwtSecret, nil
 	})
-	if err != nil || !token.Valid {
+	if err != nil || !token.Valid || claims.Type != tokenTypeStaff {
 		return nil, apierror.ErrUnauthorized
 	}
 	if claims.ID != "" {
@@ -233,6 +250,7 @@ func (s *Service) ImpersonateOwner(ctx context.Context, tenantID uuid.UUID) (str
 	}
 
 	claims := Claims{
+		Type:     tokenTypeStaff,
 		UserID:   userID,
 		TenantID: tenantID,
 		Role:     role,

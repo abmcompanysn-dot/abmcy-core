@@ -15,7 +15,10 @@ import (
 // AdminClaims identifies an ABMCY super-admin user — distinct from Claims
 // (tenant-scoped) since a super-admin has no tenant_id and must never be
 // usable to authenticate as, or access, a tenant.
+const tokenTypeAdmin = "admin"
+
 type AdminClaims struct {
+	Type   string    `json:"typ"`
 	UserID uuid.UUID `json:"user_id"`
 	Role   string    `json:"role"`
 	jwt.RegisteredClaims
@@ -45,6 +48,7 @@ func (s *Service) LoginSuperAdmin(ctx context.Context, email, password string) (
 	}
 
 	claims := AdminClaims{
+		Type:   tokenTypeAdmin,
 		UserID: userID,
 		Role:   "super_admin",
 		RegisteredClaims: jwt.RegisteredClaims{
@@ -65,7 +69,7 @@ func (s *Service) ParseAdminToken(tokenStr string) (*AdminClaims, error) {
 	token, err := jwt.ParseWithClaims(tokenStr, claims, func(t *jwt.Token) (interface{}, error) {
 		return s.jwtSecret, nil
 	})
-	if err != nil || !token.Valid || claims.Role != "super_admin" {
+	if err != nil || !token.Valid || claims.Type != tokenTypeAdmin || claims.Role != "super_admin" {
 		return nil, apierror.ErrUnauthorized
 	}
 	return claims, nil
