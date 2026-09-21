@@ -7,6 +7,7 @@ import (
 
 	"github.com/abmcy/core/internal/db"
 	"github.com/abmcy/core/pkg/apierror"
+	pwpolicy "github.com/abmcy/core/pkg/password"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
@@ -85,8 +86,8 @@ type AdminUser struct {
 // dashboard by an already-authenticated admin, or via the bootstrap X-Admin-Key
 // path when no admin account exists yet.
 func (s *Service) CreateSuperAdmin(ctx context.Context, email, password string) (*AdminUser, error) {
-	if email == "" || len(password) < 8 {
-		return nil, apierror.New(422, "validation_error", "Email requis et mot de passe d'au moins 8 caractères.")
+	if email == "" || !pwpolicy.Valid(password) {
+		return nil, apierror.New(422, "validation_error", pwpolicy.Message)
 	}
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)

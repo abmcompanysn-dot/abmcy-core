@@ -79,9 +79,21 @@ func NewService(pool *db.Pool) *Service {
 	return &Service{pool: pool}
 }
 
+// maxCustomOrderAmount borne le montant d'une commande sans line items
+// (sur-mesure) : il n'existe pas de catalogue de prix à recalculer côté
+// serveur pour ces commandes, donc le montant fourni par l'appelant (staff
+// ou clé API) ne peut être validé que par une plage raisonnable — évite un
+// montant négatif, nul, ou aberrant en cas de clé API compromise ou de bug
+// client. 10 000 000 F CFA est très au-dessus de toute commande de couture
+// plausible.
+const maxCustomOrderAmount = 10_000_000
+
 func (s *Service) Create(ctx context.Context, tenantID uuid.UUID, in CreateInput) (*Order, error) {
 	if in.CustomerName == "" || in.CustomerPhone == "" {
 		return nil, apierror.ErrValidation
+	}
+	if len(in.Items) == 0 && (in.TotalAmount <= 0 || in.TotalAmount > maxCustomOrderAmount) {
+		return nil, apierror.New(422, "validation_error", "Le montant de la commande est invalide.")
 	}
 
 	var o Order

@@ -10,6 +10,7 @@ import (
 
 	"github.com/abmcy/core/internal/db"
 	"github.com/abmcy/core/pkg/apierror"
+	pwpolicy "github.com/abmcy/core/pkg/password"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
@@ -44,8 +45,8 @@ type CustomerProfile struct {
 // for the first time, turning them into someone who can log in and see
 // their order history online. Matched by phone within the tenant.
 func (s *Service) RegisterCustomer(ctx context.Context, tenantID uuid.UUID, phone, email, password string) (string, error) {
-	if phone == "" || len(password) < 8 {
-		return "", apierror.New(422, "validation_error", "Téléphone requis et mot de passe d'au moins 8 caractères.")
+	if phone == "" || !pwpolicy.Valid(password) {
+		return "", apierror.New(422, "validation_error", pwpolicy.Message)
 	}
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
@@ -248,8 +249,8 @@ func (s *Service) RequestPasswordReset(ctx context.Context, tenantID uuid.UUID, 
 // ResetPassword consumes a reset token (single use, 1h expiry) and sets a
 // new password.
 func (s *Service) ResetPassword(ctx context.Context, tenantID uuid.UUID, plaintextToken, newPassword string) error {
-	if len(newPassword) < 8 {
-		return apierror.New(422, "validation_error", "Le mot de passe doit contenir au moins 8 caractères.")
+	if !pwpolicy.Valid(newPassword) {
+		return apierror.New(422, "validation_error", pwpolicy.Message)
 	}
 
 	hash := sha256.Sum256([]byte(plaintextToken))
@@ -287,8 +288,8 @@ func (s *Service) ResetPassword(ctx context.Context, tenantID uuid.UUID, plainte
 // forgot their password and calls the boutique instead of using the
 // online flow, or one who never set a password at all.
 func (s *Service) StaffSetCustomerPassword(ctx context.Context, tenantID, customerID uuid.UUID, newPassword string) error {
-	if len(newPassword) < 8 {
-		return apierror.New(422, "validation_error", "Le mot de passe doit contenir au moins 8 caractères.")
+	if !pwpolicy.Valid(newPassword) {
+		return apierror.New(422, "validation_error", pwpolicy.Message)
 	}
 
 	newHash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)

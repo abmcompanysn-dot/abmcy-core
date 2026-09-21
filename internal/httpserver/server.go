@@ -137,11 +137,21 @@ func (s *Server) routes(rl *authmw.RateLimit, authRL *authmw.RateLimit) {
 	// propre clé API échouerait pour la même raison, afin d'afficher une
 	// page de blocage plutôt qu'une erreur générique.
 	r.Get("/tenants/{tenantSlug}/status", s.handleGetTenantStatus)
-	r.Post("/webhooks/abmcy/{tenantSlug}", s.handleABMCYPaymentWebhook)
-	// Distinct from the tenant commerce webhook above: this one is signed
-	// with ABMCY's OWN merchant credentials (a tenant paying ITS
-	// subscription to ABMCY), never a tenant's own payment credentials.
-	r.Post("/webhooks/abmcy-subscription", s.handleSubscriptionWebhook)
+	r.Group(func(r chi.Router) {
+		// Ni les webhooks ni les routes admin ci-dessous n'ont de tenant en
+		// contexte à ce stade du routage, donc authRL dégrade sur l'IP
+		// appelante (voir RateLimit.Middleware) — protège d'un volume de
+		// requêtes anormal même si la signature HMAC / l'auth admin, elles,
+		// bloquent déjà toute requête non authentifiée.
+		if authRL != nil {
+			r.Use(authRL.Middleware)
+		}
+		r.Post("/webhooks/abmcy/{tenantSlug}", s.handleABMCYPaymentWebhook)
+		// Distinct from the tenant commerce webhook above: this one is signed
+		// with ABMCY's OWN merchant credentials (a tenant paying ITS
+		// subscription to ABMCY), never a tenant's own payment credentials.
+		r.Post("/webhooks/abmcy-subscription", s.handleSubscriptionWebhook)
+	})
 
 	// Routes d'authentification publiques — pas encore de tenant résolu à
 	// ce stade, donc pas protégées par le rate limit "par tenant" plus
@@ -333,6 +343,9 @@ func (s *Server) routes(rl *authmw.RateLimit, authRL *authmw.RateLimit) {
 	// own admin dashboard, never exposed to tenants.
 	r.Group(func(r chi.Router) {
 		r.Use(s.adminAuth)
+		if authRL != nil {
+			r.Use(authRL.Middleware)
+		}
 
 		r.Get("/admin/accounts", s.handleAdminListAccounts)
 		r.Post("/admin/accounts", s.handleAdminCreateAccount)

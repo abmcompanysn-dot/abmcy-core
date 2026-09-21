@@ -7,6 +7,7 @@ import (
 
 	"github.com/abmcy/core/internal/db"
 	"github.com/abmcy/core/pkg/apierror"
+	pwpolicy "github.com/abmcy/core/pkg/password"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
@@ -135,8 +136,8 @@ type StaffUser struct {
 // an "owner" account should be able to grant "owner" to someone else,
 // which the caller (httpserver) is responsible for checking.
 func (s *Service) CreateStaffUser(ctx context.Context, tenantID uuid.UUID, email, password, role string) (*StaffUser, error) {
-	if email == "" || len(password) < 8 {
-		return nil, apierror.New(422, "validation_error", "Email requis et mot de passe d'au moins 8 caractères.")
+	if email == "" || !pwpolicy.Valid(password) {
+		return nil, apierror.New(422, "validation_error", pwpolicy.Message)
 	}
 	if role != "owner" && role != "staff" {
 		role = "staff"
@@ -210,8 +211,8 @@ func (s *Service) SetStaffUserActive(ctx context.Context, tenantID, userID uuid.
 // exactly one owner, made at tenant creation) means "the owner" is
 // unambiguous without needing a userID from the caller.
 func (s *Service) SetTenantOwnerPassword(ctx context.Context, tenantID uuid.UUID, newPassword string) error {
-	if len(newPassword) < 8 {
-		return apierror.New(422, "validation_error", "Le mot de passe doit contenir au moins 8 caractères.")
+	if !pwpolicy.Valid(newPassword) {
+		return apierror.New(422, "validation_error", pwpolicy.Message)
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
 	if err != nil {

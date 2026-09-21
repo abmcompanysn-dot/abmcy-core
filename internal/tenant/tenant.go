@@ -6,13 +6,21 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"regexp"
 
 	"github.com/abmcy/core/internal/db"
 	"github.com/abmcy/core/pkg/apierror"
+	pwpolicy "github.com/abmcy/core/pkg/password"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"golang.org/x/crypto/bcrypt"
 )
+
+// validSlug matches the shape a tenant slug must have: it ends up in
+// webhook URLs (/webhooks/abmcy/{slug}) and subdomains, so it's restricted
+// to what's safe in both — lowercase letters, digits and hyphens, not
+// starting or ending with a hyphen.
+var validSlug = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 
 // BusinessType hints at which shape of products.attributes the dashboard
 // suggests by default for a tenant (sizes/colors for a tailor, a download
@@ -108,11 +116,14 @@ func (s *Service) Create(ctx context.Context, name, slug, contactEmail, business
 	if !ValidBusinessType(businessType) {
 		return nil, apierror.ErrValidation
 	}
+	if !validSlug.MatchString(slug) {
+		return nil, apierror.New(422, "validation_error", "Le slug du tenant doit contenir uniquement des lettres minuscules, chiffres et tirets.")
+	}
 	if (ownerEmail == "") != (ownerPassword == "") {
 		return nil, apierror.New(422, "validation_error", "L'email et le mot de passe du propriétaire doivent être fournis ensemble.")
 	}
-	if ownerPassword != "" && len(ownerPassword) < 8 {
-		return nil, apierror.New(422, "validation_error", "Le mot de passe du propriétaire doit contenir au moins 8 caractères.")
+	if ownerPassword != "" && !pwpolicy.Valid(ownerPassword) {
+		return nil, apierror.New(422, "validation_error", pwpolicy.Message)
 	}
 
 	pubKey, err := randomKey("pk_live_")
