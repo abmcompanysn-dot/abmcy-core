@@ -62,7 +62,34 @@ func (s *Service) Search(ctx context.Context, base string) ([]SearchResult, erro
 		return nil, err
 	}
 
-	tlds := []string{"com", "net", "org", "shop", "store", "africa", "online"}
+	// candidateTLDs is a broad shortlist of extensions relevant to a
+	// commerce — checked against Porkbun's live pricing list below rather
+	// than assumed to exist, since Porkbun's supported TLDs (and which of
+	// them are valid) can change and aren't worth hardcoding blindly (see
+	// "africa", confirmed live to be rejected as an invalid TLD). Each
+	// candidate that IS real then costs ~1s to check availability for, so
+	// this list stays a shortlist rather than Porkbun's full catalogue
+	// (several hundred TLDs) — checking all of those on every search
+	// would take minutes.
+	candidateTLDs := []string{
+		"com", "net", "org", "shop", "store", "online", "biz", "co",
+		"info", "site", "app", "shop", "digital", "company", "africa",
+	}
+
+	pricing, err := client.Pricing(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("domain: fetch pricing: %w", err)
+	}
+
+	tlds := make([]string, 0, len(candidateTLDs))
+	seen := make(map[string]bool, len(candidateTLDs))
+	for _, tld := range candidateTLDs {
+		if _, exists := pricing[tld]; exists && !seen[tld] {
+			tlds = append(tlds, tld)
+			seen[tld] = true
+		}
+	}
+
 	results := make([]SearchResult, 0, len(tlds))
 	for _, tld := range tlds {
 		fqdn := base + "." + tld

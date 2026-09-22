@@ -77,7 +77,7 @@ type checkResponse struct {
 	Status   string `json:"status"` // "SUCCESS" | "ERROR"
 	Message  string `json:"message,omitempty"`
 	Response struct {
-		Avail          string `json:"avail"` // "1" available, "0" taken — Porkbun encodes these as strings
+		Avail          string `json:"avail"` // "yes"/"no" (confirmed live traffic) — Porkbun encodes these as strings
 		Price          string `json:"price"`
 		FirstYearPromo string `json:"firstYearPromo"`
 	} `json:"response"`
@@ -103,7 +103,7 @@ func (c *Client) Check(ctx context.Context, fqdn string) (*CheckResult, error) {
 		return nil, fmt.Errorf("domain: porkbun check %s: %s", fqdn, out.Message)
 	}
 
-	result := &CheckResult{Domain: fqdn, Available: out.Response.Avail == "1"}
+	result := &CheckResult{Domain: fqdn, Available: out.Response.Avail == "yes"}
 	if result.Available {
 		priceStr := out.Response.Price
 		if out.Response.FirstYearPromo != "" {
@@ -115,6 +115,42 @@ func (c *Client) Check(ctx context.Context, fqdn string) (*CheckResult, error) {
 		}
 	}
 	return result, nil
+}
+
+// --- POST /pricing/get -------------------------------------------------
+// Public endpoint — no apikey/secretapikey required (still sent by post()
+// as harmless extra fields; Porkbun ignores them here), lists every TLD
+// Porkbun actually sells along with its price. Used to confirm a TLD is
+// real and priced before Search bothers calling checkDomain on it — that
+// call costs about a second each, so it's only worth spending on TLDs
+// this endpoint has already confirmed exist.
+
+type pricingResponse struct {
+	Status  string `json:"status"`
+	Pricing map[string]struct {
+		Registration string `json:"registration"`
+	} `json:"pricing"`
+}
+
+// Pricing returns every TLD Porkbun currently sells, mapped to its 1-year
+// registration price in USD.
+func (c *Client) Pricing(ctx context.Context) (map[string]float64, error) {
+	var out pricingResponse
+	if err := c.post(ctx, "/pricing/get", nil, &out); err != nil {
+		return nil, err
+	}
+	if out.Status != "SUCCESS" {
+		return nil, fmt.Errorf("domain: porkbun pricing: unexpected status %q", out.Status)
+	}
+
+	prices := make(map[string]float64, len(out.Pricing))
+	for tld, p := range out.Pricing {
+		var usd float64
+		if _, err := fmt.Sscanf(p.Registration, "%f", &usd); err == nil {
+			prices[tld] = usd
+		}
+	}
+	return prices, nil
 }
 
 // --- POST /domain/create/{domain} ------------------------------------------
