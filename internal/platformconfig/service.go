@@ -39,6 +39,12 @@ const (
 	// tenants for their ABMCY Core subscription — see internal/subscription.
 	KeyABMCYPaymentAppKey     Key = "ABMCY_PAYMENT_APP_KEY"
 	KeyABMCYPaymentHMACSecret Key = "ABMCY_PAYMENT_HMAC_SECRET"
+	// Domain search/purchase via Porkbun's API — see internal/domain.
+	// Chosen over Namecheap: Namecheap gates API access behind a $50+
+	// account balance (or 20+ domains, or $50+ spent in 2 years), which
+	// blocks a fresh account outright; Porkbun's API has no such minimum.
+	KeyPorkbunAPIKey       Key = "PORKBUN_API_KEY"
+	KeyPorkbunSecretAPIKey Key = "PORKBUN_SECRET_API_KEY"
 	// KeyCorsOrigins holds the comma-separated list of origins allowed to
 	// call the API from a browser (see httpserver.corsMiddleware) — each
 	// tenant's own storefront (e.g. https://hani.abmcy.com) needs to be
@@ -54,6 +60,7 @@ var AllKeys = []Key{
 	KeyR2AccountID, KeyR2AccessKeyID, KeyR2SecretAccessKey, KeyR2Bucket, KeyR2PublicURL,
 	KeyResendAPIKey, KeyResendFromAddr,
 	KeyABMCYPaymentAppKey, KeyABMCYPaymentHMACSecret,
+	KeyPorkbunAPIKey, KeyPorkbunSecretAPIKey,
 	KeyCorsOrigins,
 }
 
@@ -67,6 +74,8 @@ var secretKeys = map[Key]bool{
 	KeyResendAPIKey:           true,
 	KeyABMCYPaymentAppKey:     true,
 	KeyABMCYPaymentHMACSecret: true,
+	KeyPorkbunAPIKey:          true,
+	KeyPorkbunSecretAPIKey:    true,
 }
 
 func IsSecret(k Key) bool { return secretKeys[k] }

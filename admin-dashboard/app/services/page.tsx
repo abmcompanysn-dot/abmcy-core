@@ -42,6 +42,15 @@ const SERVICE_GROUPS: ServiceGroup[] = [
     ],
   },
   {
+    title: "Porkbun — achat de domaines",
+    description:
+      "Compte Porkbun de la plateforme, utilisé pour rechercher et acheter des noms de domaine au nom d'un tenant (facturé au tenant avec une marge ABMCY). Aucun lien avec les clés de paiement d'un tenant.",
+    keys: [
+      { key: "PORKBUN_API_KEY", label: "API Key", secret: true },
+      { key: "PORKBUN_SECRET_API_KEY", label: "Secret API Key", secret: true },
+    ],
+  },
+  {
     title: "Domaines autorisés (CORS)",
     description:
       "Sites autorisés à appeler l'API depuis un navigateur — liste séparée par des virgules, ex: https://dash.abmcy.com,https://hani.abmcy.com. Ajoutez ici le domaine du site de chaque tenant avant qu'il puisse afficher son catalogue.",

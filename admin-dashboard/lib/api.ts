@@ -166,6 +166,8 @@ export type ConfigKey =
   | "RESEND_FROM_ADDR"
   | "ABMCY_PAYMENT_APP_KEY"
   | "ABMCY_PAYMENT_HMAC_SECRET"
+  | "PORKBUN_API_KEY"
+  | "PORKBUN_SECRET_API_KEY"
   | "CORS_ORIGINS";
 
 export interface ConfigStatus {

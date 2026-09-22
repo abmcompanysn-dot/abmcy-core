@@ -717,6 +717,66 @@ export function sendContractEmail(
   });
 }
 
+// --- Nom de domaine ---------------------------------------------------
+
+export interface DomainSearchResult {
+  domain: string;
+  available: boolean;
+  price_fcfa?: number;
+}
+
+export interface TenantDomain {
+  id: string;
+  domain: string;
+  source: "existing" | "purchased";
+  status: "pending" | "active" | "failed";
+  price_fcfa?: number;
+  payment_url?: string;
+  created_at: string;
+}
+
+/** GET /domains/search?q=... — cherche un nom sur plusieurs extensions,
+ * renvoie la disponibilité et le prix ABMCY (avec marge) pour chacune. */
+export function searchDomains(
+  apiKey: string,
+  base: string
+): Promise<DomainSearchResult[]> {
+  return request<DomainSearchResult[]>(
+    `/domains/search?q=${encodeURIComponent(base)}`,
+    apiKey,
+    { method: "GET" }
+  );
+}
+
+/** POST /domains/existing — enregistre un domaine que le tenant possède déjà. */
+export function registerExistingDomain(
+  apiKey: string,
+  domainName: string
+): Promise<TenantDomain> {
+  return request<TenantDomain>("/domains/existing", apiKey, {
+    method: "POST",
+    body: JSON.stringify({ domain: domainName }),
+  });
+}
+
+/** POST /domains/purchase — génère un lien de paiement pour qu'ABMCY
+ * achète ce domaine au nom du tenant. */
+export function purchaseDomain(
+  apiKey: string,
+  domainName: string,
+  returnUrl?: string
+): Promise<TenantDomain> {
+  return request<TenantDomain>("/domains/purchase", apiKey, {
+    method: "POST",
+    body: JSON.stringify({ domain: domainName, return_url: returnUrl }),
+  });
+}
+
+/** GET /domains — historique des domaines du tenant (existants ou achetés). */
+export function listTenantDomains(apiKey: string): Promise<TenantDomain[]> {
+  return request<TenantDomain[]>("/domains", apiKey, { method: "GET" });
+}
+
 // --- Trafic -------------------------------------------------------------
 
 export type TrafficSummary = {

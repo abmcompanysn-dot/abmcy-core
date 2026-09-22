@@ -1306,6 +1306,101 @@ func (s *Server) handleSubscriptionWebhook(w http.ResponseWriter, r *http.Reques
 	w.WriteHeader(http.StatusOK)
 }
 
+// --- Nom de domaine (existant ou acheté via ABMCY) -----------------------
+
+// handleSearchDomains lets a tenant search a base name across common
+// TLDs and see ABMCY's price (Porkbun's cost plus markup) for each
+// available one.
+func (s *Server) handleSearchDomains(w http.ResponseWriter, r *http.Request) {
+	base := r.URL.Query().Get("q")
+	results, err := s.domains.Search(r.Context(), base)
+	if err != nil {
+		response.Err(w, err)
+		return
+	}
+	response.JSON(w, http.StatusOK, results)
+}
+
+// handleRegisterExistingDomain records that a tenant already owns a
+// domain — no payment, active immediately.
+func (s *Server) handleRegisterExistingDomain(w http.ResponseWriter, r *http.Request) {
+	t, _ := authmw.TenantFromContext(r.Context())
+	var body struct {
+		Domain string `json:"domain"`
+	}
+	if err := decodeJSON(r, &body); err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+	d, err := s.domains.RegisterExisting(r.Context(), t.ID, body.Domain)
+	if err != nil {
+		response.Err(w, err)
+		return
+	}
+	response.JSON(w, http.StatusCreated, d)
+}
+
+// handlePurchaseDomain generates a payment link for a domain ABMCY will
+// buy on the tenant's behalf once the payment is confirmed.
+func (s *Server) handlePurchaseDomain(w http.ResponseWriter, r *http.Request) {
+	t, _ := authmw.TenantFromContext(r.Context())
+	var body struct {
+		Domain    string `json:"domain"`
+		ReturnURL string `json:"return_url"`
+	}
+	if err := decodeJSON(r, &body); err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+	callbackURL := s.publicBaseURL + "/webhooks/abmcy-domain"
+	d, err := s.domains.InitiatePurchase(r.Context(), t.ID, body.Domain, callbackURL, body.ReturnURL)
+	if err != nil {
+		response.Err(w, err)
+		return
+	}
+	response.JSON(w, http.StatusOK, d)
+}
+
+// handleListTenantDomains lets a tenant see their own domain history.
+func (s *Server) handleListTenantDomains(w http.ResponseWriter, r *http.Request) {
+	t, _ := authmw.TenantFromContext(r.Context())
+	domains, err := s.domains.ListForTenant(r.Context(), t.ID)
+	if err != nil {
+		response.Err(w, err)
+		return
+	}
+	response.JSON(w, http.StatusOK, domains)
+}
+
+// handleDomainWebhook is ABMCY Core Payment's callback for a domain
+// purchase — signed with ABMCY's own merchant credentials, same account
+// as subscription billing. app_ref is always prefixed "domain-" (see
+// domain.Service.InitiatePurchase).
+func (s *Server) handleDomainWebhook(w http.ResponseWriter, r *http.Request) {
+	rawBody, err := io.ReadAll(r.Body)
+	if err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+	if !s.subscriptions.VerifyWebhookSignature(rawBody, r.Header.Get("X-Abmcy-Signature")) {
+		response.Err(w, apierror.New(401, "invalid_signature", "Signature du webhook invalide."))
+		return
+	}
+
+	var payload struct {
+		AppRef string `json:"app_ref"`
+	}
+	if err := json.Unmarshal(rawBody, &payload); err != nil {
+		response.Err(w, apierror.ErrValidation)
+		return
+	}
+	if err := s.domains.HandleWebhook(r.Context(), payload.AppRef); err != nil {
+		response.Err(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
 // handleAdminUploadTenantLogo lets ABMCY staff upload a tenant's logo
 // directly from the admin dashboard, without needing that tenant's own
 // X-API-Key. It reuses storage.Service.UploadProductImage — which already

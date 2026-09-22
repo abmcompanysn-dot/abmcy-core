@@ -9,6 +9,7 @@ import (
 	"github.com/abmcy/core/internal/catalog"
 	"github.com/abmcy/core/internal/content"
 	"github.com/abmcy/core/internal/db"
+	"github.com/abmcy/core/internal/domain"
 	"github.com/abmcy/core/internal/features"
 	authmw "github.com/abmcy/core/internal/middleware"
 	"github.com/abmcy/core/internal/notification"
@@ -42,6 +43,7 @@ type Server struct {
 	traffic       *traffic.Service
 	features      *features.Service
 	subscriptions *subscription.Service
+	domains       *domain.Service
 
 	products     *catalog.ProductService
 	fabrics      *catalog.FabricService
@@ -75,6 +77,7 @@ type Deps struct {
 	Traffic         *traffic.Service
 	Features        *features.Service
 	Subscriptions   *subscription.Service
+	Domains         *domain.Service
 	Products        *catalog.ProductService
 	Fabrics         *catalog.FabricService
 	Customers       *catalog.CustomerService
@@ -105,6 +108,7 @@ func New(d Deps) *Server {
 		traffic:       d.Traffic,
 		features:      d.Features,
 		subscriptions: d.Subscriptions,
+		domains:       d.Domains,
 		products:      d.Products,
 		fabrics:       d.Fabrics,
 		customers:     d.Customers,
@@ -151,6 +155,10 @@ func (s *Server) routes(rl *authmw.RateLimit, authRL *authmw.RateLimit) {
 		// with ABMCY's OWN merchant credentials (a tenant paying ITS
 		// subscription to ABMCY), never a tenant's own payment credentials.
 		r.Post("/webhooks/abmcy-subscription", s.handleSubscriptionWebhook)
+		// Same ABMCY merchant account as the subscription webhook above —
+		// a domain purchase is ABMCY charging the tenant, not the tenant's
+		// own commerce.
+		r.Post("/webhooks/abmcy-domain", s.handleDomainWebhook)
 	})
 
 	// Routes d'authentification publiques — pas encore de tenant résolu à
@@ -201,6 +209,11 @@ func (s *Server) routes(rl *authmw.RateLimit, authRL *authmw.RateLimit) {
 		r.Post("/subscription/accept-cgu", s.handleAcceptCGU)
 		r.Post("/subscription/invoice", s.handleCreateSubscriptionInvoice)
 		r.Get("/subscription/payments", s.handleListSubscriptionPayments)
+
+		r.Get("/domains/search", s.handleSearchDomains)
+		r.Post("/domains/existing", s.handleRegisterExistingDomain)
+		r.Post("/domains/purchase", s.handlePurchaseDomain)
+		r.Get("/domains", s.handleListTenantDomains)
 
 		r.Get("/traffic", s.handleTrafficSummary)
 		r.Get("/traffic/top-routes", s.handleTrafficTopRoutes)

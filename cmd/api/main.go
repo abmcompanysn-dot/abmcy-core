@@ -26,6 +26,7 @@ import (
 	"github.com/abmcy/core/internal/config"
 	"github.com/abmcy/core/internal/content"
 	"github.com/abmcy/core/internal/db"
+	"github.com/abmcy/core/internal/domain"
 	"github.com/abmcy/core/internal/features"
 	"github.com/abmcy/core/internal/httpserver"
 	authmw "github.com/abmcy/core/internal/middleware"
@@ -90,6 +91,7 @@ func main() {
 	trafficSvc := traffic.NewService(pool)
 	featuresSvc := features.NewService(pool)
 	subscriptions := subscription.NewService(pool, platformCfg, "https://core.diarra.app")
+	domains := domain.NewService(pool, platformCfg)
 
 	// Catalogue optionnel (activé par tenant via internal/features) :
 	// produits, tissus, clients, mesures, panier, galerie, avis.
@@ -146,6 +148,7 @@ func main() {
 		Traffic:         trafficSvc,
 		Features:        featuresSvc,
 		Subscriptions:   subscriptions,
+		Domains:         domains,
 		Products:        products,
 		Fabrics:         fabrics,
 		Customers:       customers,
