@@ -8,6 +8,40 @@ import { CatalogToggle } from "./CatalogToggle";
 import { TenantActiveToggle } from "./TenantActiveToggle";
 import { TenantDangerActions } from "./TenantDangerActions";
 
+/** Clé publique tronquée avec bouton copier — contrairement à la clé
+ * secrète (affichée une seule fois à la création), api_key_public est
+ * stockée en clair côté serveur et peut être consultée à tout moment. */
+function PublicKeyCell({ apiKeyPublic }: { apiKeyPublic: string }) {
+  const [copied, setCopied] = useState(false);
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(apiKeyPublic);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Presse-papiers indisponible : l'utilisateur peut sélectionner le texte manuellement.
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <span
+        className="max-w-[120px] truncate font-mono text-xs text-slate-600"
+        title={apiKeyPublic}
+      >
+        {apiKeyPublic}
+      </span>
+      <button
+        onClick={handleCopy}
+        className="shrink-0 rounded border border-slate-200 px-1.5 py-0.5 text-[11px] font-medium text-slate-600 transition-colors hover:bg-slate-100"
+      >
+        {copied ? "Copié !" : "Copier"}
+      </button>
+    </div>
+  );
+}
+
 export function TenantsTable({
   tenants,
   onRateLimitSaved,
@@ -73,6 +107,7 @@ export function TenantsTable({
               <tr className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                 <th className="px-4 py-3 font-medium">Nom</th>
                 <th className="px-4 py-3 font-medium">Slug</th>
+                <th className="px-4 py-3 font-medium">Clé publique</th>
                 <th className="px-4 py-3 font-medium">Plan</th>
                 <th className="px-4 py-3 font-medium">Statut</th>
                 <th className="px-4 py-3 font-medium">Stockage</th>
@@ -92,6 +127,9 @@ export function TenantsTable({
                   </td>
                   <td className="px-4 py-3 font-mono text-xs text-slate-600">
                     {t.slug}
+                  </td>
+                  <td className="px-4 py-3">
+                    <PublicKeyCell apiKeyPublic={t.api_key_public} />
                   </td>
                   <td className="px-4 py-3">
                     <span className="inline-flex items-center rounded-full bg-indigo-50 px-2.5 py-0.5 text-xs font-medium text-indigo-700">
