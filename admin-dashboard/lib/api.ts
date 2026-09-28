@@ -56,6 +56,7 @@ export type BusinessType =
   | "couture_sur_mesure"
   | "commerce_general"
   | "produit_numerique"
+  | "agence_immobiliere"
   | "general";
 
 /** Libellés français lisibles pour chaque type de commerce. */
@@ -63,6 +64,7 @@ export const BUSINESS_TYPE_LABELS: Record<BusinessType, string> = {
   couture_sur_mesure: "Couture sur-mesure",
   commerce_general: "Commerce général",
   produit_numerique: "Produit numérique",
+  agence_immobiliere: "Agence immobilière",
   general: "Général / non précisé",
 };
 
@@ -70,6 +72,7 @@ export const BUSINESS_TYPES: BusinessType[] = [
   "couture_sur_mesure",
   "commerce_general",
   "produit_numerique",
+  "agence_immobiliere",
   "general",
 ];
 

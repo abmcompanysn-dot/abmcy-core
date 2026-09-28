@@ -29,16 +29,17 @@ var validSlug = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 type BusinessType string
 
 const (
-	BusinessCouture BusinessType = "couture_sur_mesure"
-	BusinessGeneral BusinessType = "commerce_general"
-	BusinessDigital BusinessType = "produit_numerique"
-	BusinessMedia   BusinessType = "media"
-	BusinessOther   BusinessType = "general"
+	BusinessCouture    BusinessType = "couture_sur_mesure"
+	BusinessGeneral    BusinessType = "commerce_general"
+	BusinessDigital    BusinessType = "produit_numerique"
+	BusinessMedia      BusinessType = "media"
+	BusinessRealEstate BusinessType = "agence_immobiliere"
+	BusinessOther      BusinessType = "general"
 )
 
 func ValidBusinessType(bt string) bool {
 	switch BusinessType(bt) {
-	case BusinessCouture, BusinessGeneral, BusinessDigital, BusinessMedia, BusinessOther:
+	case BusinessCouture, BusinessGeneral, BusinessDigital, BusinessMedia, BusinessRealEstate, BusinessOther:
 		return true
 	}
 	return false

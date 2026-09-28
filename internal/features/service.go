@@ -63,6 +63,12 @@ func PresetFor(businessType string) Flags {
 		return Flags{ProductsEnabled: true, CartEnabled: true, ReviewsEnabled: true}
 	case tenant.BusinessMedia:
 		return Flags{ContentEnabled: true}
+	case tenant.BusinessRealEstate:
+		// Une annonce (chambre, bien à louer, prestation) se consulte et se
+		// réserve/contacte — elle ne se "commande" pas comme un article via
+		// un panier classique. Photos multiples (galerie) et avis ont du
+		// sens ; pas de panier ni de tissus.
+		return Flags{ProductsEnabled: true, GalleryEnabled: true, ReviewsEnabled: true}
 	default:
 		return Flags{}
 	}
