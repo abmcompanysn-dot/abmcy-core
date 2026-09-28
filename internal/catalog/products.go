@@ -129,7 +129,43 @@ func (s *ProductService) List(ctx context.Context, tenantID uuid.UUID, f ListFil
 			}
 			products = append(products, p)
 		}
-		return rows.Err()
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		if len(products) == 0 {
+			return nil
+		}
+
+		// Une seule requête pour les photos de tous les produits listés
+		// (plutôt qu'une requête par produit) — la liste (jusqu'à 200
+		// produits) affiche typiquement une vignette par annonce, donc ce
+		// n'est pas optionnel comme sur Get où l'appelant peut se contenter
+		// du texte.
+		ids := make([]uuid.UUID, len(products))
+		byID := make(map[uuid.UUID]*Product, len(products))
+		for i := range products {
+			ids[i] = products[i].ID
+			byID[products[i].ID] = &products[i]
+		}
+		imgRows, err := tx.Query(ctx, `
+			SELECT product_id, id, image_url FROM product_images
+			WHERE product_id = ANY($1) ORDER BY created_at
+		`, ids)
+		if err != nil {
+			return err
+		}
+		defer imgRows.Close()
+		for imgRows.Next() {
+			var productID uuid.UUID
+			var img ProductImage
+			if err := imgRows.Scan(&productID, &img.ID, &img.URL); err != nil {
+				return err
+			}
+			if p, ok := byID[productID]; ok {
+				p.Images = append(p.Images, img)
+			}
+		}
+		return imgRows.Err()
 	})
 	if err != nil {
 		return nil, fmt.Errorf("catalog: list products: %w", err)
