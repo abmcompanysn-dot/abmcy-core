@@ -590,6 +590,15 @@ func (s *Server) customerAuth(next http.Handler) http.Handler {
 			return
 		}
 
+		// Re-checked on every request, same as staffAuth — a customer
+		// token issued before the tenant was suspended must not keep
+		// working afterward just because it hasn't expired yet.
+		t, err := authmw.LookupByID(r.Context(), s.pool, claims.TenantID)
+		if err != nil || !t.Active {
+			response.Err(w, apierror.ErrTenantSuspended)
+			return
+		}
+
 		ctx := context.WithValue(r.Context(), customerCtxKey{}, claims)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
