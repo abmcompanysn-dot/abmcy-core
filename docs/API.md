@@ -588,6 +588,7 @@ POST /auth/logout
 | `cart_not_enabled` | 403 | Le service panier n'est pas activé pour ce compte |
 | `gallery_not_enabled` | 403 | Le service galerie n'est pas activé pour ce compte |
 | `reviews_not_enabled` | 403 | Le service avis n'est pas activé pour ce compte |
+| `content_not_enabled` | 403 | Le service contenu éditorial n'est pas activé pour ce compte |
 | `order_not_editable` | 409 | La commande n'est plus modifiable |
 | `invalid_or_expired_token` | 400 | Lien de réinitialisation invalide ou expiré |
 | `file_too_large` | 413 | Fichier de plus de 25 Mo |
