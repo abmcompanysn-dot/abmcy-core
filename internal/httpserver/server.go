@@ -142,14 +142,21 @@ func (s *Server) routes(rl *authmw.RateLimit, authRL *authmw.RateLimit) {
 	// page de blocage plutôt qu'une erreur générique.
 	r.Get("/tenants/{tenantSlug}/status", s.handleGetTenantStatus)
 	r.Group(func(r chi.Router) {
-		// Ni les webhooks ni les routes admin ci-dessous n'ont de tenant en
-		// contexte à ce stade du routage, donc authRL dégrade sur l'IP
+		// Ni les webhooks ni les routes admin/SEO ci-dessous n'ont de tenant
+		// en contexte à ce stade du routage, donc authRL dégrade sur l'IP
 		// appelante (voir RateLimit.Middleware) — protège d'un volume de
 		// requêtes anormal même si la signature HMAC / l'auth admin, elles,
 		// bloquent déjà toute requête non authentifiée.
 		if authRL != nil {
 			r.Use(authRL.Middleware)
 		}
+		// Référencement — sitemap.xml, robots.txt et le flux produit (format
+		// Google Merchant) doivent rester accessibles sans authentification :
+		// les crawlers n'envoient jamais de X-API-Key. Voir
+		// internal/httpserver/seo_handlers.go.
+		r.Get("/tenants/{tenantSlug}/sitemap.xml", s.handleSitemap)
+		r.Get("/tenants/{tenantSlug}/robots.txt", s.handleRobotsTxt)
+		r.Get("/tenants/{tenantSlug}/product-feed.xml", s.handleProductFeed)
 		r.Post("/webhooks/abmcy/{tenantSlug}", s.handleABMCYPaymentWebhook)
 		// Distinct from the tenant commerce webhook above: this one is signed
 		// with ABMCY's OWN merchant credentials (a tenant paying ITS
