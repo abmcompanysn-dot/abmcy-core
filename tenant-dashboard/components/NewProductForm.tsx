@@ -1,8 +1,14 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { useAuth } from "@/lib/auth-context";
-import { ApiError, createProduct, type Product } from "@/lib/api";
+import {
+  ApiError,
+  createProduct,
+  getProduct,
+  uploadImage,
+  type Product,
+} from "@/lib/api";
 import {
   AttributesEditor,
   attributeFieldsToObject,
@@ -24,8 +30,13 @@ export function NewProductForm({
   const [stockQuantity, setStockQuantity] = useState("");
   const [isFeatured, setIsFeatured] = useState(false);
   const [attributeFields, setAttributeFields] = useState<AttributeField[]>([]);
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   function resetForm() {
     setName("");
@@ -36,7 +47,22 @@ export function NewProductForm({
     setStockQuantity("");
     setIsFeatured(false);
     setAttributeFields([]);
+    setPhotoFile(null);
+    setPhotoPreview((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
     setError(null);
+  }
+
+  function handlePhotoSelect(files: FileList | null) {
+    const file = files?.[0];
+    if (!file) return;
+    setPhotoFile(file);
+    setPhotoPreview((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return URL.createObjectURL(file);
+    });
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -65,7 +91,7 @@ export function NewProductForm({
     setLoading(true);
     try {
       const attributes = attributeFieldsToObject(attributeFields);
-      const product = await createProduct(apiKey, {
+      let product = await createProduct(apiKey, {
         name: name.trim(),
         description: description.trim() || undefined,
         price: Math.round(priceNum),
@@ -76,6 +102,27 @@ export function NewProductForm({
           Object.keys(attributes).length > 0 ? attributes : undefined,
         is_featured: isFeatured,
       });
+
+      // La photo est envoyée après coup (l'upload s'attache à un produit
+      // déjà créé, voir POST /uploads/image?product_id=...) — un échec ici
+      // ne doit pas faire perdre le produit déjà créé, juste prévenir que
+      // la photo n'est pas passée.
+      if (photoFile) {
+        setUploadingPhoto(true);
+        try {
+          await uploadImage(apiKey, photoFile, product.id);
+          product = await getProduct(apiKey, product.id);
+        } catch (photoErr) {
+          setError(
+            photoErr instanceof ApiError
+              ? `Produit créé, mais la photo n'a pas pu être envoyée : ${photoErr.message}`
+              : "Produit créé, mais la photo n'a pas pu être envoyée."
+          );
+        } finally {
+          setUploadingPhoto(false);
+        }
+      }
+
       onCreated(product);
       resetForm();
       setOpen(false);
@@ -210,11 +257,63 @@ export function NewProductForm({
           />
         </div>
 
+        <div>
+          <label className="mb-1 block text-sm font-medium text-slate-700">
+            Photo
+          </label>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            onChange={(e) => handlePhotoSelect(e.target.files)}
+            className="hidden"
+            disabled={loading}
+          />
+          <input
+            ref={cameraInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            onChange={(e) => handlePhotoSelect(e.target.files)}
+            className="hidden"
+            disabled={loading}
+          />
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={loading}
+              className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 disabled:opacity-50"
+            >
+              Choisir une photo
+            </button>
+            <button
+              type="button"
+              onClick={() => cameraInputRef.current?.click()}
+              disabled={loading}
+              className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 disabled:opacity-50"
+            >
+              Prendre une photo
+            </button>
+            {photoPreview && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={photoPreview}
+                alt="Aperçu"
+                className="h-12 w-12 rounded-md border border-slate-200 object-cover"
+              />
+            )}
+          </div>
+          <p className="mt-1 text-xs text-slate-500">
+            Facultatif — vous pourrez aussi en ajouter une plus tard.
+          </p>
+        </div>
+
         <AttributesEditor
           fields={attributeFields}
           onChange={setAttributeFields}
           disabled={loading}
-          helpText='Exemples selon votre activité : couture -> genre, sizes (S, M, L), colors ; commerce général -> brand, weight_kg ; produit numérique -> download_url, license.'
+          helpText='Exemples selon votre activité : agence immobilière -> ville, quartier, chambres, superficie_m2 ; couture -> genre, sizes (S, M, L), colors ; commerce général -> brand, weight_kg.'
         />
 
         {error && (
@@ -228,7 +327,11 @@ export function NewProductForm({
           disabled={loading}
           className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {loading ? "Création..." : "Créer le produit"}
+          {loading
+            ? uploadingPhoto
+              ? "Envoi de la photo..."
+              : "Création..."
+            : "Créer le produit"}
         </button>
       </form>
     </div>
