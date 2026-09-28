@@ -42,6 +42,7 @@ function emptyProfileForm() {
     brand_color: "",
     tagline: "",
     language: "fr",
+    storefront_url: "",
   };
 }
 
@@ -90,6 +91,7 @@ export default function TenantProfilePage() {
             brand_color: found.brand_color ?? "",
             tagline: found.tagline ?? "",
             language: found.language || "fr",
+            storefront_url: found.storefront_url ?? "",
           });
         }
         setSocials(socialList.map((s) => ({ type: s.type, url: s.url })));
@@ -126,6 +128,7 @@ export default function TenantProfilePage() {
         brand_color: form.brand_color || undefined,
         tagline: form.tagline || undefined,
         language: form.language || undefined,
+        storefront_url: form.storefront_url || undefined,
       });
       setTenant(updated);
       setMessage("Profil enregistré.");
@@ -433,6 +436,27 @@ export default function TenantProfilePage() {
               maxLength={200}
               className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
             />
+          </label>
+
+          <label className="block text-sm sm:col-span-2">
+            <span className="mb-1 block font-medium text-slate-700">
+              URL du site (storefront)
+            </span>
+            <input
+              type="url"
+              value={form.storefront_url}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, storefront_url: e.target.value }))
+              }
+              placeholder="https://votre-site.abmcy.com"
+              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+            />
+            <span className="mt-1 block text-xs text-slate-500">
+              Utilisée pour générer le sitemap, le robots.txt et le flux
+              produits de ce tenant (voir /tenants/&#123;slug&#125;/sitemap.xml).
+              Sans cette URL, ces routes renvoient une erreur claire plutôt
+              qu&apos;un lien inventé.
+            </span>
           </label>
         </div>
 

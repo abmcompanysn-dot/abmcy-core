@@ -99,6 +99,7 @@ export interface Tenant {
   brand_color?: string;
   tagline?: string;
   language: string;
+  storefront_url?: string;
 }
 
 export interface TenantSocial {
@@ -117,6 +118,7 @@ export interface UpdateTenantProfileInput {
   brand_color?: string;
   tagline?: string;
   language?: string;
+  storefront_url?: string;
 }
 
 /** Les six services optionnels, chacun activable indépendamment par tenant. */
