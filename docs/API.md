@@ -296,16 +296,17 @@ minuit. Au-delà, l'erreur `email_quota_exceeded` (`429`) est renvoyée.
 
 ## Catalogue (optionnel)
 
-ABMCY expose six services **indépendants**, chacun activé à la demande
+ABMCY expose sept services **indépendants**, chacun activé à la demande
 selon votre activité : cinq pour le catalogue (produits, tissus, panier,
-galerie, avis) et un pour la gestion d'équipe (voir plus bas). Un atelier de
-couture sur-mesure a par exemple `products_enabled`, `fabrics_enabled` et
-`gallery_enabled` sans `cart_enabled` (les commandes passent par
-`/custom-orders`, pas un panier classique) ni `staff_enabled` tant qu'un
-seul compte suffit. Si un service n'est pas activé, ses routes renvoient un
-`403` avec un code dédié : `products_not_enabled`, `fabrics_not_enabled`,
-`cart_not_enabled`, `gallery_not_enabled`, `reviews_not_enabled` ou
-`staff_not_enabled`. Vérifiez votre statut :
+galerie, avis), un pour la gestion d'équipe, et un pour le contenu
+éditorial (voir plus bas). Un atelier de couture sur-mesure a par exemple
+`products_enabled`, `fabrics_enabled` et `gallery_enabled` sans
+`cart_enabled` (les commandes passent par `/custom-orders`, pas un panier
+classique) ni `staff_enabled` tant qu'un seul compte suffit. Si un service
+n'est pas activé, ses routes renvoient un `403` avec un code dédié :
+`products_not_enabled`, `fabrics_not_enabled`, `cart_not_enabled`,
+`gallery_not_enabled`, `reviews_not_enabled`, `staff_not_enabled` ou
+`content_not_enabled`. Vérifiez votre statut :
 
 ```http
 GET /features
@@ -317,26 +318,37 @@ GET /features
   "cart_enabled": false,
   "gallery_enabled": true,
   "reviews_enabled": true,
-  "staff_enabled": false
+  "staff_enabled": false,
+  "content_enabled": false
 }
 ```
 
 > **Activation.** Ces services ne s'activent pas eux-mêmes : contactez
 > ABMCY pour qu'un opérateur les bascule depuis le dashboard admin
 > (`PUT /admin/tenants/{id}/features`). Un nouveau compte reçoit un
-> préréglage raisonnable selon son secteur d'activité au moment de sa
-> création (couture sur-mesure → produits + tissus + galerie + avis ;
-> commerce général ou produit numérique → produits + panier + avis ;
-> autre → rien de pré-activé) — c'est un point de départ, pas une
-> limite : n'importe quelle combinaison des cinq services peut être
-> activée ou désactivée ensuite, sans lien avec votre secteur déclaré.
+> préréglage raisonnable selon son secteur d'activité (`business_type`)
+> au moment de sa création :
+>
+> | `business_type` | Préréglage |
+> |---|---|
+> | `couture_sur_mesure` | produits + tissus + galerie + avis |
+> | `commerce_general` | produits + panier + avis |
+> | `produit_numerique` | produits + panier + avis |
+> | `agence_immobiliere` | produits + galerie + avis (pas de panier — une annonce se consulte et se réserve, elle ne se "commande" pas comme un article) |
+> | `media` | contenu éditorial (`content_enabled`) |
+> | `general` | rien de pré-activé |
+>
+> C'est un point de départ, pas une limite : n'importe quelle combinaison
+> des sept services peut être activée ou désactivée ensuite, sans lien
+> avec votre secteur déclaré.
 
 ### Produits
 
 Le modèle de produit est générique — `attributes` est un objet JSON libre où
 vous mettez ce qui a du sens pour votre activité (tailles/couleurs pour la
 couture, poids/marque pour un commerce général, lien de téléchargement pour
-un produit numérique...).
+un produit numérique, ville/quartier/superficie pour une annonce
+immobilière...).
 
 ```http
 POST /products
@@ -354,12 +366,47 @@ Content-Type: application/json
 }
 ```
 
+> **Il n'y a pas de champ `image_url` à envoyer ici** — un produit n'a pas
+> de photo à sa création. Une fois le produit créé (vous avez son `id` dans
+> la réponse `201`), attachez sa ou ses photo(s) via
+> `POST /uploads/image?product_id={id}` (voir [Upload
+> d'images](#upload-dimages) plus haut) — chaque appel ajoute une photo, il
+> n'y a pas de limite au nombre de photos par produit.
+
 ```http
 GET /products?category=robes&sort=price_asc
 GET /products/{productID}
 ```
 
 `sort` accepte : `price_asc`, `price_desc`, `newest`, `featured`.
+
+Chaque produit renvoyé inclut son tableau de photos (vide si aucune n'a
+encore été envoyée) :
+```json
+{
+  "id": "uuid",
+  "name": "Robe wax",
+  "...": "...",
+  "images": [
+    { "id": "uuid", "url": "https://votre-domaine-images/..." }
+  ]
+}
+```
+
+### Modifier un produit
+
+```http
+PATCH /products/{productID}
+Content-Type: application/json
+
+{ "price": 32000, "is_active": false }
+```
+
+Tous les champs sont optionnels — seuls ceux fournis sont modifiés. Comme à
+la création, `image_url` n'est pas un champ reconnu ici : pour changer la
+photo d'un produit, envoyez-en une nouvelle via `POST /uploads/image?
+product_id={id}` (elle s'ajoute aux photos existantes, elle ne les
+remplace pas).
 
 ### Tissus
 
