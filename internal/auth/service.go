@@ -210,7 +210,16 @@ func (s *Service) SetStaffUserActive(ctx context.Context, tenantID, userID uuid.
 // any one tenant's RLS context, and Create's guarantee (every tenant has
 // exactly one owner, made at tenant creation) means "the owner" is
 // unambiguous without needing a userID from the caller.
-func (s *Service) SetTenantOwnerPassword(ctx context.Context, tenantID uuid.UUID, newPassword string) error {
+//
+// That guarantee has an exception: tenant.Service.Create accepts empty
+// ownerEmail/ownerPassword to skip owner creation entirely (meant for
+// scripts/tests needing only the API key — see its doc comment), which a
+// tenant provisioned that way can get stuck on, with no account able to
+// log in and no way to create one (CreateStaffUser requires an existing
+// staff JWT, a chicken-and-egg problem). If createEmail is non-empty and
+// no owner row exists yet, this creates one instead of just failing —
+// the same bootstrap escape hatch X-Admin-Key is for admin accounts.
+func (s *Service) SetTenantOwnerPassword(ctx context.Context, tenantID uuid.UUID, newPassword, createEmail string) error {
 	if !pwpolicy.Valid(newPassword) {
 		return apierror.New(422, "validation_error", pwpolicy.Message)
 	}
@@ -226,8 +235,18 @@ func (s *Service) SetTenantOwnerPassword(ctx context.Context, tenantID uuid.UUID
 		if err != nil {
 			return err
 		}
-		if tag.RowsAffected() == 0 {
+		if tag.RowsAffected() > 0 {
+			return nil
+		}
+		if createEmail == "" {
 			return apierror.New(404, "not_found", "Ce tenant n'a pas de compte owner.")
+		}
+		_, err = tx.Exec(ctx, `
+			INSERT INTO users (tenant_id, email, password_hash, role, is_active)
+			VALUES ($1, $2, $3, 'owner', true)
+		`, tenantID, createEmail, string(hash))
+		if err != nil {
+			return fmt.Errorf("auth: create missing owner: %w", err)
 		}
 		return nil
 	})

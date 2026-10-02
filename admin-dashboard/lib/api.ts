@@ -481,17 +481,24 @@ export function impersonateTenant(
  * passe du compte owner d'un tenant (ex : owner bloqué sans email
  * fonctionnel pour une réinitialisation self-service).
  */
+/**
+ * createEmail : si ce tenant n'a pas encore de compte owner (créé via
+ * Create avec ownerEmail laissé vide), le backend en crée un avec cet
+ * email plutôt que de renvoyer "Ce tenant n'a pas de compte owner." — sans
+ * effet si un owner existe déjà (son mot de passe est juste mis à jour).
+ */
 export function setTenantOwnerPassword(
   adminKey: string,
   tenantId: string,
-  newPassword: string
+  newPassword: string,
+  createEmail?: string
 ): Promise<void> {
   return request<void>(
     `/admin/tenants/${encodeURIComponent(tenantId)}/owner-password`,
     adminKey,
     {
       method: "PUT",
-      body: JSON.stringify({ new_password: newPassword }),
+      body: JSON.stringify({ new_password: newPassword, create_email: createEmail }),
     }
   );
 }

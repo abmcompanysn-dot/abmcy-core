@@ -27,13 +27,22 @@ function isPasswordValid(pw: string): boolean {
  * de passe généré automatiquement (affiché une seule fois via
  * NewSecretModal), soit un mot de passe choisi par l'opérateur admin.
  * Jamais stocké ni renvoyé par le backend au-delà de cet appel.
+ *
+ * tenantEmail sert de filet : un tenant créé sans ownerEmail/ownerPassword
+ * (voir tenant.Service.Create) n'a aucun compte capable de se connecter, et
+ * aucune autre route ne peut en créer un après coup (CreateStaffUser exige
+ * déjà un JWT staff). On envoie toujours cet email comme create_email —
+ * sans effet si un owner existe déjà, sinon il sert à créer le compte
+ * manquant dans le même appel plutôt que d'échouer avec "pas de owner".
  */
 export function ResetOwnerPasswordButton({
   tenantId,
   tenantName,
+  tenantEmail,
 }: {
   tenantId: string;
   tenantName: string;
+  tenantEmail?: string;
 }) {
   const { adminKey } = useAuth();
   const { showToast } = useToast();
@@ -47,7 +56,7 @@ export function ResetOwnerPasswordButton({
     if (!adminKey || saving) return;
     setSaving(true);
     try {
-      await setTenantOwnerPassword(adminKey, tenantId, password);
+      await setTenantOwnerPassword(adminKey, tenantId, password, tenantEmail);
       showToast("Mot de passe du owner mis à jour.", "success");
       return true;
     } catch (err) {

@@ -480,7 +480,11 @@ export default function TenantProfilePage() {
         {tenant && (
           <div className="flex flex-wrap gap-2">
             <ImpersonateTenantButton tenantId={tenant.id} tenantName={tenant.name} />
-            <ResetOwnerPasswordButton tenantId={tenant.id} tenantName={tenant.name} />
+            <ResetOwnerPasswordButton
+              tenantId={tenant.id}
+              tenantName={tenant.name}
+              tenantEmail={tenant.contact_email}
+            />
           </div>
         )}
       </div>

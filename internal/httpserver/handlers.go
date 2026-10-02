@@ -1119,7 +1119,9 @@ func (s *Server) handleAdminSetTenantActive(w http.ResponseWriter, r *http.Reque
 
 // handleAdminSetTenantOwnerPassword lets the ABMCY super-admin dashboard
 // reset a tenant's owner account password (e.g. the owner is locked out
-// and has no working email for a self-service reset). See
+// and has no working email for a self-service reset) — or, if the tenant
+// somehow has no owner row yet (created via Create with ownerEmail left
+// empty) and CreateEmail is provided, create one. See
 // auth.Service.SetTenantOwnerPassword.
 func (s *Server) handleAdminSetTenantOwnerPassword(w http.ResponseWriter, r *http.Request) {
 	tenantID, err := parseUUID(chi.URLParam(r, "tenantID"))
@@ -1130,13 +1132,14 @@ func (s *Server) handleAdminSetTenantOwnerPassword(w http.ResponseWriter, r *htt
 
 	var body struct {
 		NewPassword string `json:"new_password"`
+		CreateEmail string `json:"create_email"`
 	}
 	if err := decodeJSON(r, &body); err != nil {
 		response.Err(w, apierror.ErrValidation)
 		return
 	}
 
-	if err := s.authSvc.SetTenantOwnerPassword(r.Context(), tenantID, body.NewPassword); err != nil {
+	if err := s.authSvc.SetTenantOwnerPassword(r.Context(), tenantID, body.NewPassword, body.CreateEmail); err != nil {
 		response.Err(w, err)
 		return
 	}
